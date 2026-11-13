@@ -2,5 +2,5 @@
   "path": "/path/to/plugins/gridfinity",
   "approval": "<approval hash from plugin.inspect>",
   "entry": "bin",
-  "params": {"width": 3, "depth": 2, "height": 6, "magnets": true, "screws": true, "dividers_x": 2, "dividers_y": 1}
+  "params": {"width": 3, "depth": 2, "height": 6, "holes_magnet": true, "holes_screw": true, "dividers_x": 2, "dividers_y": 1}
 }}]}

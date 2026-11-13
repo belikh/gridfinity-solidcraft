@@ -1,7 +1,7 @@
 {
   "id": "gridfinity",
   "name": "Gridfinity",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Gridfinity bins (feet, stacking lip, magnet/screw holes, dividers) and baseplates as ordinary editable features.",
   "capabilities": [
     "commands@0.1"
@@ -22,42 +22,27 @@
           "properties": {
             "width": {
               "type": "integer",
-              "title": "Width",
-              "description": "Cells along X (42 mm each)",
+              "title": "Width (cells)",
+              "description": "Cells along X, 42 mm each",
               "minimum": 1,
               "maximum": 12,
-              "default": 1,
-              "unit": "cells"
+              "default": 1
             },
             "depth": {
               "type": "integer",
-              "title": "Depth",
-              "description": "Cells along Y (42 mm each)",
+              "title": "Depth (cells)",
+              "description": "Cells along Y, 42 mm each",
               "minimum": 1,
               "maximum": 12,
-              "default": 1,
-              "unit": "cells"
+              "default": 1
             },
             "height": {
               "type": "integer",
-              "title": "Height",
-              "description": "Height units (7 mm each)",
+              "title": "Height (units)",
+              "description": "Height units, 7 mm each",
               "minimum": 2,
               "maximum": 20,
-              "default": 3,
-              "unit": "units"
-            },
-            "magnets": {
-              "type": "boolean",
-              "title": "Magnet holes",
-              "description": "6.5 x 2.4 mm holes in every foot",
-              "default": false
-            },
-            "screws": {
-              "type": "boolean",
-              "title": "Screw holes",
-              "description": "3 mm holes in every foot",
-              "default": false
+              "default": 3
             },
             "dividers_x": {
               "type": "integer",
@@ -75,27 +60,39 @@
               "maximum": 10,
               "default": 0
             },
-            "stacking_lip": {
+            "holes_magnet": {
               "type": "boolean",
-              "title": "Stacking lip",
-              "description": "Lip on top so bins stack",
-              "default": true
+              "title": "Magnet holes",
+              "description": "6.5 x 2.4 mm holes in every foot",
+              "default": false
             },
-            "origin_x": {
+            "holes_screw": {
+              "type": "boolean",
+              "title": "Screw holes",
+              "description": "3 mm holes in every foot",
+              "default": false
+            },
+            "position_x": {
               "type": "number",
               "title": "Position X",
               "description": "Corner of the bin",
               "default": 0,
               "unit": "mm"
             },
-            "origin_y": {
+            "position_y": {
               "type": "number",
               "title": "Position Y",
               "description": "Corner of the bin",
               "default": 0,
               "unit": "mm"
             },
-            "name": {
+            "stacking_lip": {
+              "type": "boolean",
+              "title": "Stacking lip",
+              "description": "Lip on top so bins stack",
+              "default": true
+            },
+            "title": {
               "type": "string",
               "title": "Body name",
               "description": "Leave empty for an automatic name",
@@ -122,43 +119,41 @@
           "properties": {
             "width": {
               "type": "integer",
-              "title": "Width",
-              "description": "Cells along X (42 mm each)",
+              "title": "Width (cells)",
+              "description": "Cells along X, 42 mm each",
               "minimum": 1,
               "maximum": 12,
-              "default": 3,
-              "unit": "cells"
+              "default": 3
             },
             "depth": {
               "type": "integer",
-              "title": "Depth",
-              "description": "Cells along Y (42 mm each)",
+              "title": "Depth (cells)",
+              "description": "Cells along Y, 42 mm each",
               "minimum": 1,
               "maximum": 12,
-              "default": 3,
-              "unit": "cells"
+              "default": 3
             },
-            "magnets": {
+            "holes_magnet": {
               "type": "boolean",
               "title": "Magnet holes",
               "description": "6.5 x 2.4 mm holes in every pocket",
               "default": false
             },
-            "origin_x": {
+            "position_x": {
               "type": "number",
               "title": "Position X",
               "description": "Corner of the baseplate",
               "default": 0,
               "unit": "mm"
             },
-            "origin_y": {
+            "position_y": {
               "type": "number",
               "title": "Position Y",
               "description": "Corner of the baseplate",
               "default": 0,
               "unit": "mm"
             },
-            "name": {
+            "title": {
               "type": "string",
               "title": "Body name",
               "description": "Leave empty for an automatic name",

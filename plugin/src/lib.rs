@@ -25,8 +25,19 @@ fn get_u(p: &Map<String, Value>, key: &str, default: u64, min: u64, max: u64) ->
     }
 }
 
-fn get_b(p: &Map<String, Value>, key: &str, default: bool) -> Result<bool, String> {
-    match p.get(key) {
+/// The first of `keys` that is present: the dialog's name, then older/script names.
+fn pick<'a>(p: &'a Map<String, Value>, keys: &[&'a str]) -> (&'a str, Option<&'a Value>) {
+    for k in keys {
+        if let Some(v) = p.get(*k).filter(|v| !v.is_null()) {
+            return (k, Some(v));
+        }
+    }
+    (keys[0], None)
+}
+
+fn get_b(p: &Map<String, Value>, keys: &[&str], default: bool) -> Result<bool, String> {
+    let (key, v) = pick(p, keys);
+    match v {
         None | Some(Value::Null) => Ok(default),
         Some(Value::Bool(b)) => Ok(*b),
         _ => Err(format!("{key} must be true or false")),
@@ -34,14 +45,15 @@ fn get_b(p: &Map<String, Value>, key: &str, default: bool) -> Result<bool, Strin
 }
 
 fn get_origin(p: &Map<String, Value>) -> Result<[f64; 2], String> {
-    // The desktop dialog sends origin_x / origin_y (it draws no list fields); scripts may use origin.
-    let num = |k: &str| -> Result<Option<f64>, String> {
-        match p.get(k) {
-            None | Some(Value::Null) => Ok(None),
-            Some(v) => v.as_f64().filter(|n| n.is_finite()).map(Some).ok_or(format!("{k} must be a number (mm)")),
+    // The desktop dialog sends position_x / position_y (it draws no list fields);
+    // scripts may also use origin_x / origin_y or origin: [x, y].
+    let num = |keys: &[&str]| -> Result<Option<f64>, String> {
+        match pick(p, keys) {
+            (_, None) => Ok(None),
+            (k, Some(v)) => v.as_f64().filter(|n| n.is_finite()).map(Some).ok_or(format!("{k} must be a number (mm)")),
         }
     };
-    let (ox, oy) = (num("origin_x")?, num("origin_y")?);
+    let (ox, oy) = (num(&["position_x", "origin_x"])?, num(&["position_y", "origin_y"])?);
     if ox.is_some() || oy.is_some() {
         return Ok([ox.unwrap_or(0.0), oy.unwrap_or(0.0)]);
     }
@@ -55,10 +67,11 @@ fn get_origin(p: &Map<String, Value>) -> Result<[f64; 2], String> {
 }
 
 fn get_name(p: &Map<String, Value>, default: &str) -> Result<String, String> {
-    match p.get("name") {
+    match pick(p, &["title", "name"]).1 {
         None | Some(Value::Null) => Ok(default.into()),
         Some(Value::String(s)) if !s.trim().is_empty() && s.len() <= 60 => Ok(s.trim().into()),
-        _ => Err("name must be a short text".into()),
+        Some(Value::String(s)) if s.trim().is_empty() => Ok(default.into()),
+        _ => Err("the body name must be a short text".into()),
     }
 }
 
@@ -72,11 +85,11 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         nx,
         ny,
         units,
-        magnets: get_b(p, "magnets", false)?,
-        screws: get_b(p, "screws", false)?,
+        magnets: get_b(p, &["holes_magnet", "magnets"], false)?,
+        screws: get_b(p, &["holes_screw", "screws"], false)?,
         div_x: get_u(p, "dividers_x", 0, 0, MAX_DIVIDERS)?,
         div_y: get_u(p, "dividers_y", 0, 0, MAX_DIVIDERS)?,
-        lip: get_b(p, "stacking_lip", true)?,
+        lip: get_b(p, &["stacking_lip"], true)?,
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity bin {nx}x{ny}x{units}"))?,
     })
@@ -90,7 +103,7 @@ pub fn parse_baseplate(params: &Value) -> Result<BaseplateOptions, String> {
     Ok(BaseplateOptions {
         nx,
         ny,
-        magnets: get_b(p, "magnets", false)?,
+        magnets: get_b(p, &["holes_magnet", "magnets"], false)?,
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity baseplate {nx}x{ny}"))?,
     })
@@ -152,6 +165,11 @@ mod tests {
         assert_eq!(parse_bin(&json!({"origin_x": 50.0, "origin_y": -10})).unwrap().origin, [50.0, -10.0]);
         assert_eq!(parse_bin(&json!({"origin": [1, 2]})).unwrap().origin, [1.0, 2.0]);
         assert!(parse_bin(&json!({"origin_x": "a"})).is_err());
+        // the desktop dialog's names
+        let o = parse_bin(&json!({"holes_magnet": true, "holes_screw": true, "position_x": 5, "title": "Tray"})).unwrap();
+        assert!(o.magnets && o.screws);
+        assert_eq!((o.origin, o.name.as_str()), ([5.0, 0.0], "Tray"));
+        assert!(parse_baseplate(&json!({"holes_magnet": true})).unwrap().magnets);
         let (name, cmds) = plan("baseplate", &json!({"width": 2, "depth": 2, "magnets": true})).unwrap();
         assert_eq!(name, "Gridfinity baseplate 2x2");
         assert!(!cmds.is_empty());

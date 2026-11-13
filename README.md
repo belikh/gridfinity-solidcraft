@@ -18,17 +18,16 @@ Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-opens
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
 measuring its cross-sections. Not yet printed: please report how it fits.
 
-> Status: early (0.1.1). Tested with SolidCraft 0.41.0 through scripts/`solidcraft-cli`. The input
-> schema follows the rules the desktop app's plugin dialog uses to draw a form, but running it from
-> the desktop menu is not confirmed yet. SolidCraft's plugin runtime is itself experimental, so other
+> Status: early (0.1.2). Tested with SolidCraft 0.41.0 through scripts/`solidcraft-cli`; the desktop
+> app's plugin dialog shows the form (Plugins menu › Gridfinity bin / baseplate). SolidCraft's plugin runtime is itself experimental, so other
 > versions may refuse the package.
 
 ## Install
-Download `gridfinity-0.1.1.zip` from the [latest release](../../releases/latest), then in SolidCraft:
+Download `gridfinity-0.1.2.zip` from the [latest release](../../releases/latest), then in SolidCraft:
 **Preferences › Plugins › Install plugin…** and pick the zip. From a script:
 
 ```json
-{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.1.1.zip"}}]}
+{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.1.2.zip"}}]}
 ```
 
 Add `"replace": true` to update an installed version. You can also unpack the zip into
@@ -45,16 +44,16 @@ run an entry with that hash ([examples/](examples/)).
 ```json
 {"commands": [{"command": "plugin.run", "params": {
   "path": "/path/to/plugins/gridfinity", "approval": "<hash from plugin.inspect>", "entry": "bin",
-  "params": {"width": 2, "depth": 1, "height": 3, "magnets": true, "dividers_x": 1}}}]}
+  "params": {"width": 2, "depth": 1, "height": 3, "holes_magnet": true, "dividers_x": 1}}}]}
 ```
 `solidcraft-cli run bin.json --out bin.stl` builds it and exports an STL.
 
 | Entry | Parameters (default) |
 |---|---|
-| `bin` | `width` 1–12 (1), `depth` 1–12 (1), `height` 2–20 units (3), `magnets` (false), `screws` (false), `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `stacking_lip` (true), `origin_x`, `origin_y` mm (0), `name` |
-| `baseplate` | `width` 1–12 (3), `depth` 1–12 (3), `magnets` (false), `origin_x`, `origin_y` mm (0), `name` |
+| `bin` | `width` 1–12 (1), `depth` 1–12 (1), `height` 2–20 units (3), `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
+| `baseplate` | `width` 1–12 (3), `depth` 1–12 (3), `holes_magnet` (false), `position_x`, `position_y` mm (0), `title` |
 
-Scripts may also pass `origin` as `[x, y]`.
+Scripts may also use the older names `magnets`, `screws`, `name` and `origin: [x, y]`.
 
 Choices that differ slightly from the spec: the stacking lip has a 0.3 mm flat on top instead of a
 knife edge, the floor inside a bin is at 6 mm, and baseplate pockets keep a 0.05 mm rim between
