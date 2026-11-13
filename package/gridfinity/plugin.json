@@ -1,8 +1,8 @@
 {
   "id": "gridfinity",
   "name": "Gridfinity",
-  "version": "0.2.0",
-  "description": "Gridfinity bins and baseplates (full or half grid; feet, stacking lip, magnet/screw holes, dividers; open or solid baseplates).",
+  "version": "0.3.0",
+  "description": "Gridfinity bins (hollow or solid for custom cutouts) and baseplates, full or half grid, with feet, stacking lip, holes and dividers.",
   "capabilities": [
     "commands@0.1"
   ],
@@ -18,7 +18,8 @@
             "grid",
             "width",
             "depth",
-            "height"
+            "height",
+            "inside"
           ],
           "properties": {
             "width": {
@@ -48,7 +49,7 @@
             "dividers_x": {
               "type": "integer",
               "title": "Dividers across X",
-              "description": "Walls splitting the bin along X",
+              "description": "Walls splitting the bin along X (hollow bins)",
               "minimum": 0,
               "maximum": 10,
               "default": 0
@@ -56,7 +57,7 @@
             "dividers_y": {
               "type": "integer",
               "title": "Dividers across Y",
-              "description": "Walls splitting the bin along Y",
+              "description": "Walls splitting the bin along Y (hollow bins)",
               "minimum": 0,
               "maximum": 10,
               "default": 0
@@ -108,6 +109,16 @@
                 "21 mm (half)"
               ],
               "default": "42 mm (full)"
+            },
+            "inside": {
+              "type": "string",
+              "title": "Inside",
+              "description": "Hollow bin, or filled to the top of the walls so you can cut your own shapes into it",
+              "enum": [
+                "Hollow",
+                "Solid (for custom cutouts)"
+              ],
+              "default": "Hollow"
             }
           }
         },

@@ -1,0 +1,9 @@
+{"commands": [
+ {"command": "plugin.run", "params": {"path": "/path/to/plugins/gridfinity", "approval": "<approval hash from plugin.inspect>", "entry": "bin", "params": {"width": 2, "depth": 1, "height": 3, "inside": "Solid (for custom cutouts)", "title": "Holder"}}},
+ {"command": "sketch.create", "params": {"plane": "XY", "offset": 21, "name": "Cutouts"}},
+ {"command": "sketch.circle.center", "params": {"center": [14, 21], "diameter": 12}},
+ {"command": "sketch.circle.center", "params": {"center": [32, 21], "diameter": 12}},
+ {"command": "sketch.rectangle.rounded", "params": {"p0": [46, 8], "p1": [78, 34], "radius": 3}},
+ {"command": "sketch.finish", "params": {}},
+ {"command": "solid.extrude", "params": {"sketch": "Cutouts", "profiles": "all", "distance": 12, "operation": "cut", "targets": ["Holder"], "direction": "negative"}}
+]}

@@ -4,7 +4,9 @@
 pub mod geometry;
 
 use geometry::{baseplate_commands, bin_commands, BaseplateOptions, BinOptions, HALF_PITCH, PITCH};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
+#[cfg(any(test, target_arch = "wasm32"))]
+use serde_json::json;
 
 #[cfg(target_arch = "wasm32")]
 mod bindings {
@@ -113,6 +115,12 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         div_x: get_u(p, "dividers_x", 0, 0, MAX_DIVIDERS)?,
         div_y: get_u(p, "dividers_y", 0, 0, MAX_DIVIDERS)?,
         lip: get_b(p, &["stacking_lip"], true)?,
+        solid: match p.get("inside") {
+            None | Some(Value::Null) => false,
+            Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("solid") => true,
+            Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("hollow") => false,
+            _ => return Err("inside must be \"Hollow\" or \"Solid (for custom cutouts)\"".into()),
+        },
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity{half} bin {nx}x{ny}x{units}"))?,
     })
@@ -214,6 +222,9 @@ mod tests {
         assert_eq!(parse_bin(&json!({"grid": "42 mm (full)"})).unwrap().pitch, PITCH);
         assert!(parse_bin(&json!({"grid": "huge"})).is_err());
         assert!(parse_bin(&json!({"width": 13})).is_err());
+        assert!(parse_bin(&json!({"inside": "Solid (for custom cutouts)"})).unwrap().solid);
+        assert!(!parse_bin(&json!({"inside": "Hollow"})).unwrap().solid);
+        assert!(parse_bin(&json!({"inside": "liquid"})).is_err());
         let b = parse_baseplate(&json!({"grid": "21 mm (half)", "bottom": "Open (frame only)", "width": 4})).unwrap();
         assert_eq!((b.pitch, b.open, b.name.as_str()), (HALF_PITCH, true, "Gridfinity half baseplate frame 4x3"));
         assert!(parse_baseplate(&json!({"bottom": "Open (frame only)", "holes_magnet": true})).is_err());

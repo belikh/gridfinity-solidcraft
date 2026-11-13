@@ -14,8 +14,13 @@ one undo step, editable afterwards, and they keep working without the plugin.
   stacking lip, optional magnet holes (6.5 × 2.4 mm), screw holes (3 mm) and dividers.
   Full grid (42 mm cells) or **half grid** (21 mm cells: four feet fit one baseplate pocket; magnet
   holes sit on the same spots as a full-grid baseplate's magnets).
+- **Solid bins** (`inside`: "Solid (for custom cutouts)"): filled to the top of the walls with the
+  stacking lip around, so you can sketch on the flat top and cut holders for your own tools
+  ([example](examples/solid-holder.json)).
 - **baseplate**: width × depth pockets with the Gridfinity profile, full or half grid, a solid
   bottom (optional magnet holes) or an **open frame** (no bottom).
+
+![Solid bin with custom cutouts](docs/images/solid-bin-cutouts.png)
 
 | Half-grid 2×2 bin, underside | Open-frame baseplate |
 |---|---|
@@ -25,16 +30,16 @@ Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-opens
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
 measuring its cross-sections. Not yet printed: please report how it fits.
 
-> Status: early (0.2.0). Tested with SolidCraft 0.41.0 through scripts/`solidcraft-cli`; the desktop
+> Status: early (0.3.0). Tested with SolidCraft 0.41.0 through scripts/`solidcraft-cli`; the desktop
 > app's plugin dialog shows the form (Plugins menu › Gridfinity bin / baseplate). SolidCraft's plugin runtime is itself experimental, so other
 > versions may refuse the package.
 
 ## Install
-Download `gridfinity-0.2.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
+Download `gridfinity-0.3.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
 **Preferences › Plugins › Install plugin…** and pick the zip. From a script:
 
 ```json
-{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.2.0.zip"}}]}
+{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.3.0.zip"}}]}
 ```
 
 Add `"replace": true` to update an installed version. You can also unpack the zip into
@@ -57,7 +62,7 @@ run an entry with that hash ([examples/](examples/)).
 
 | Entry | Parameters (default) |
 |---|---|
-| `bin` | `grid` "42 mm (full)" / "21 mm (half)", `width` 1–12 full or 1–24 half (1), `depth` (1), `height` 2–20 units (3), `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
+| `bin` | `grid` "42 mm (full)" / "21 mm (half)", `width` 1–12 full or 1–24 half (1), `depth` (1), `height` 2–20 units (3), `inside` "Hollow" / "Solid (for custom cutouts)", `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
 | `baseplate` | `grid`, `width` (3), `depth` (3), `bottom` "Solid" / "Open (frame only)", `holes_magnet` (false, solid only), `position_x`, `position_y` mm (0), `title` |
 
 Scripts may also say `"full"` / `"half"` / `"open"` and use the older names `magnets`, `screws`, `name` and `origin: [x, y]`.

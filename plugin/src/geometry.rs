@@ -39,6 +39,8 @@ pub struct BinOptions {
     pub div_x: u32,
     pub div_y: u32,
     pub lip: bool,
+    /// Filled up to the top of the walls (no cavity, no dividers), for cutting custom holders.
+    pub solid: bool,
     pub origin: [f64; 2],
     pub name: String,
 }
@@ -203,6 +205,10 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
         sketch(&mut out, z, &n("Lip3"), vec![rrect(cx, cy, w - 2.0 * inset, d - 2.0 * inset, top - inset)]);
         out.push(extrude(&n("Lip3"), LIP.0, Op::Cut(b), Some(-45.0), "negative"));
         z -= LIP.0;
+        if o.solid {
+            // Filled: the top is flat at the wall height, inside the lip.
+            return holes(out, o, &n, &cl);
+        }
         sketch(&mut out, z, &n("Support1"), vec![rrect(cx, cy, w - 2.0 * tip, d - 2.0 * tip, top - tip)]);
         out.push(extrude(&n("Support1"), LIP_SUPPORT, Op::Cut(b), None, "negative"));
         z -= LIP_SUPPORT;
@@ -212,6 +218,9 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
         z -= slope;
     } else {
         z = height;
+        if o.solid {
+            return holes(out, o, &n, &cl);
+        }
     }
     sketch(&mut out, z, &n("Cavity"), vec![rrect(cx, cy, w - 2.0 * WALL, d - 2.0 * WALL, top - WALL)]);
     out.push(extrude(&n("Cavity"), z - FLOOR_Z, Op::Cut(b), None, "negative"));
@@ -230,13 +239,20 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
             "height": r4(z - FLOOR_Z), "operation": "join", "targets": [b]})));
     }
 
+    holes(out, o, &n, &cl)
+}
+
+/// Magnet and screw holes in the bottom of every foot.
+fn holes(mut out: Vec<Value>, o: &BinOptions, n: &dyn Fn(&str) -> String, cl: &[(f64, f64)]) -> Vec<Value> {
+    let b = o.name.as_str();
+    let pitch = o.pitch;
     // Holes in the bottom of every foot.
     if o.magnets {
-        sketch(&mut out, 0.0, &n("Magnets"), hole_circles(&cl, o.origin, pitch, MAGNET_D));
+        sketch(&mut out, 0.0, &n("Magnets"), hole_circles(cl, o.origin, pitch, MAGNET_D));
         out.push(extrude(&n("Magnets"), MAGNET_DEPTH, Op::Cut(b), None, "positive"));
     }
     if o.screws {
-        sketch(&mut out, 0.0, &n("Screws"), hole_circles(&cl, o.origin, pitch, SCREW_D));
+        sketch(&mut out, 0.0, &n("Screws"), hole_circles(cl, o.origin, pitch, SCREW_D));
         out.push(extrude(&n("Screws"), SCREW_DEPTH, Op::Cut(b), None, "positive"));
     }
     out
@@ -283,7 +299,7 @@ mod tests {
     use super::*;
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
-        BinOptions { nx, ny, pitch: PITCH, units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true,
+        BinOptions { nx, ny, pitch: PITCH, units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false,
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 
@@ -357,6 +373,22 @@ mod tests {
         // 41.5 mm outside, feet 20.5 mm at the top
         assert!(c.iter().any(|v| v["command"] == "sketch.rectangle.rounded" && v["params"]["p1"] == json!([41.75, 41.75])));
         assert!(c.iter().any(|v| v["command"] == "sketch.rectangle.rounded" && v["params"]["p1"] == json!([20.75, 20.75])));
+    }
+
+    #[test]
+    fn solid_bin_has_no_cavity_or_dividers_but_keeps_lip_and_holes() {
+        let mut o = bin(2, 1, 3);
+        o.solid = true;
+        let c = bin_commands(&o);
+        let names: Vec<String> = c.iter().filter(|v| v["command"] == "sketch.create")
+            .map(|v| v["params"]["name"].as_str().unwrap().to_string()).collect();
+        assert!(names.iter().any(|n| n.ends_with("Lip3")));
+        assert!(!names.iter().any(|n| n.ends_with("Cavity") || n.ends_with("Support1")));
+        assert!(!c.iter().any(|v| v["command"] == "solid.box"));
+        assert_eq!(c.iter().filter(|v| v["command"] == "sketch.circle.center").count(), 8);
+        o.lip = false;
+        assert!(!bin_commands(&o).iter().any(|v| v["command"] == "solid.extrude" && v["params"]["operation"] == "cut"
+            && !v["params"]["sketch"].as_str().unwrap().ends_with("Magnets")));
     }
 
     #[test]
