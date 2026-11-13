@@ -39,13 +39,13 @@ Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-opens
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
 measuring its cross-sections. Not yet printed: please report how it fits.
 
-> Status: early (0.4.0). Tested with SolidCraft 0.41.0 through scripts/`solidcraft-cli`; the desktop
-> app's plugin dialog shows the form (Plugins menu › Gridfinity bin / baseplate). SolidCraft's plugin runtime is itself experimental, so other
+> Status: early (0.4.0). Tested with SolidCraft 0.41.0, both through scripts/`solidcraft-cli` and in
+> the desktop app's plugin dialog. SolidCraft's plugin runtime is itself experimental, so other
 > versions may refuse the package.
 
 ## Install
 Download `gridfinity-0.4.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
-**Preferences › Plugins › Install plugin…** and pick the zip. From a script:
+**Plugins › Install plugin…** (or **Preferences › Plugins**) and pick the zip. From a script:
 
 ```json
 {"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.4.0.zip"}}]}
@@ -55,7 +55,17 @@ Add `"replace": true` to update an installed version. You can also unpack the zi
 `~/.local/share/solidcraft/plugins/` (Linux), `%LOCALAPPDATA%/SolidCraft/plugins` (Windows) or
 `~/Library/Application Support/SolidCraft/plugins` (macOS).
 
-## Run
+## Use it in SolidCraft
+Open **Plugins › Gridfinity › Gridfinity bin…** or **Gridfinity baseplate…**, fill in the form and
+press **Run**. The result is ordinary features in the History bar.
+
+| Plugins menu | The bin form (here a custom 40 × 25 mm grid) |
+|---|---|
+| ![Plugins menu](docs/images/plugins-menu.png) | ![Bin dialog](docs/images/dialog-custom.png) |
+
+![The bin in SolidCraft after Run](docs/images/gui-custom-bin.png)
+
+## Run from a script
 SolidCraft runs plugin code only when you ask: inspect the package to get its approval hash, then
 run an entry with that hash ([examples/](examples/)).
 
