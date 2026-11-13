@@ -1,0 +1,634 @@
+{
+ "commands": [
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 0,
+    "name": "Plate"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     0.0,
+     0.0
+    ],
+    "p1": [
+     126.0,
+     84.0
+    ],
+    "radius": 4.0
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Plate",
+    "profiles": "all",
+    "distance": 7.65,
+    "operation": "new",
+    "body_name": "Baseplate"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 7.65,
+    "name": "Pocket1"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     0.05,
+     0.05
+    ],
+    "p1": [
+     41.95,
+     41.95
+    ],
+    "radius": 3.95
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     0.05,
+     42.05
+    ],
+    "p1": [
+     41.95,
+     83.95
+    ],
+    "radius": 3.95
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     42.05,
+     0.05
+    ],
+    "p1": [
+     83.95,
+     41.95
+    ],
+    "radius": 3.95
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     42.05,
+     42.05
+    ],
+    "p1": [
+     83.95,
+     83.95
+    ],
+    "radius": 3.95
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     84.05,
+     0.05
+    ],
+    "p1": [
+     125.95,
+     41.95
+    ],
+    "radius": 3.95
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     84.05,
+     42.05
+    ],
+    "p1": [
+     125.95,
+     83.95
+    ],
+    "radius": 3.95
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Pocket1",
+    "profiles": "all",
+    "distance": 2.1,
+    "operation": "cut",
+    "targets": [
+     "Baseplate"
+    ],
+    "taper": -45,
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 5.55,
+    "name": "Pocket2"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     2.15,
+     2.15
+    ],
+    "p1": [
+     39.85,
+     39.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     2.15,
+     44.15
+    ],
+    "p1": [
+     39.85,
+     81.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     44.15,
+     2.15
+    ],
+    "p1": [
+     81.85,
+     39.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     44.15,
+     44.15
+    ],
+    "p1": [
+     81.85,
+     81.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     86.15,
+     2.15
+    ],
+    "p1": [
+     123.85,
+     39.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     86.15,
+     44.15
+    ],
+    "p1": [
+     123.85,
+     81.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Pocket2",
+    "profiles": "all",
+    "distance": 1.8,
+    "operation": "cut",
+    "targets": [
+     "Baseplate"
+    ],
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 3.75,
+    "name": "Pocket3"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     2.15,
+     2.15
+    ],
+    "p1": [
+     39.85,
+     39.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     2.15,
+     44.15
+    ],
+    "p1": [
+     39.85,
+     81.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     44.15,
+     2.15
+    ],
+    "p1": [
+     81.85,
+     39.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     44.15,
+     44.15
+    ],
+    "p1": [
+     81.85,
+     81.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     86.15,
+     2.15
+    ],
+    "p1": [
+     123.85,
+     39.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     86.15,
+     44.15
+    ],
+    "p1": [
+     123.85,
+     81.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Pocket3",
+    "profiles": "all",
+    "distance": 0.7,
+    "operation": "cut",
+    "targets": [
+     "Baseplate"
+    ],
+    "taper": -45,
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 3.05,
+    "name": "Magnets"
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     8.0,
+     8.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     8.0,
+     34.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     34.0,
+     8.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     34.0,
+     34.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     8.0,
+     50.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     8.0,
+     76.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     34.0,
+     50.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     34.0,
+     76.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     50.0,
+     8.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     50.0,
+     34.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     76.0,
+     8.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     76.0,
+     34.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     50.0,
+     50.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     50.0,
+     76.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     76.0,
+     50.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     76.0,
+     76.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     92.0,
+     8.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     92.0,
+     34.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     118.0,
+     8.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     118.0,
+     34.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     92.0,
+     50.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     92.0,
+     76.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     118.0,
+     50.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     118.0,
+     76.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Magnets",
+    "profiles": "all",
+    "distance": 2.4,
+    "operation": "cut",
+    "targets": [
+     "Baseplate"
+    ],
+    "direction": "negative"
+   }
+  }
+ ]
+}

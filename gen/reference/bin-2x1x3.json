@@ -1,0 +1,560 @@
+{
+ "commands": [
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 4.75,
+    "name": "Body"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     0.25,
+     0.25
+    ],
+    "p1": [
+     83.75,
+     41.75
+    ],
+    "radius": 3.75
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Body",
+    "profiles": "all",
+    "distance": 20.35,
+    "operation": "new",
+    "body_name": "Bin"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 4.75,
+    "name": "Feet3"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     0.25,
+     0.25
+    ],
+    "p1": [
+     41.75,
+     41.75
+    ],
+    "radius": 3.75
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     42.25,
+     0.25
+    ],
+    "p1": [
+     83.75,
+     41.75
+    ],
+    "radius": 3.75
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Feet3",
+    "profiles": "all",
+    "distance": 2.15,
+    "operation": "join",
+    "targets": [
+     "Bin"
+    ],
+    "taper": -45,
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 2.6,
+    "name": "Feet2"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     2.4,
+     2.4
+    ],
+    "p1": [
+     39.6,
+     39.6
+    ],
+    "radius": 1.6
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     44.4,
+     2.4
+    ],
+    "p1": [
+     81.6,
+     39.6
+    ],
+    "radius": 1.6
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Feet2",
+    "profiles": "all",
+    "distance": 1.8,
+    "operation": "join",
+    "targets": [
+     "Bin"
+    ],
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 0.8,
+    "name": "Feet1"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     2.4,
+     2.4
+    ],
+    "p1": [
+     39.6,
+     39.6
+    ],
+    "radius": 1.6
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     44.4,
+     2.4
+    ],
+    "p1": [
+     81.6,
+     39.6
+    ],
+    "radius": 1.6
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Feet1",
+    "profiles": "all",
+    "distance": 0.8,
+    "operation": "join",
+    "targets": [
+     "Bin"
+    ],
+    "taper": -45,
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 25.1,
+    "name": "Lip1"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     0.55,
+     0.55
+    ],
+    "p1": [
+     83.45,
+     41.45
+    ],
+    "radius": 3.45
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Lip1",
+    "profiles": "all",
+    "distance": 1.6,
+    "operation": "cut",
+    "targets": [
+     "Bin"
+    ],
+    "taper": -45,
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 23.5,
+    "name": "Lip2"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     2.15,
+     2.15
+    ],
+    "p1": [
+     81.85,
+     39.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Lip2",
+    "profiles": "all",
+    "distance": 1.8,
+    "operation": "cut",
+    "targets": [
+     "Bin"
+    ],
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 21.7,
+    "name": "Lip3"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     2.15,
+     2.15
+    ],
+    "p1": [
+     81.85,
+     39.85
+    ],
+    "radius": 1.85
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Lip3",
+    "profiles": "all",
+    "distance": 0.7,
+    "operation": "cut",
+    "targets": [
+     "Bin"
+    ],
+    "taper": -45,
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 21.0,
+    "name": "Support1"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     2.85,
+     2.85
+    ],
+    "p1": [
+     81.15,
+     39.15
+    ],
+    "radius": 1.15
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Support1",
+    "profiles": "all",
+    "distance": 1.2,
+    "operation": "cut",
+    "targets": [
+     "Bin"
+    ],
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 19.8,
+    "name": "Support2"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     2.85,
+     2.85
+    ],
+    "p1": [
+     81.15,
+     39.15
+    ],
+    "radius": 1.15
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Support2",
+    "profiles": "all",
+    "distance": 1.65,
+    "operation": "cut",
+    "targets": [
+     "Bin"
+    ],
+    "taper": 45,
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 18.15,
+    "name": "Cavity"
+   }
+  },
+  {
+   "command": "sketch.rectangle.rounded",
+   "params": {
+    "p0": [
+     1.2,
+     1.2
+    ],
+    "p1": [
+     82.8,
+     40.8
+    ],
+    "radius": 2.8
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Cavity",
+    "profiles": "all",
+    "distance": 12.15,
+    "operation": "cut",
+    "targets": [
+     "Bin"
+    ],
+    "direction": "negative"
+   }
+  },
+  {
+   "command": "solid.box",
+   "params": {
+    "corner": [
+     41.4,
+     1.2,
+     6.0
+    ],
+    "length": 1.2,
+    "width": 39.6,
+    "height": 12.15,
+    "operation": "join",
+    "targets": [
+     "Bin"
+    ]
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY",
+    "offset": 0,
+    "name": "Magnets"
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     8.0,
+     8.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     8.0,
+     34.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     34.0,
+     8.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     34.0,
+     34.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     50.0,
+     8.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     50.0,
+     34.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     76.0,
+     8.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     76.0,
+     34.0
+    ],
+    "diameter": 6.5
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "sketch": "Magnets",
+    "profiles": "all",
+    "distance": 2.4,
+    "operation": "cut",
+    "targets": [
+     "Bin"
+    ],
+    "direction": "positive"
+   }
+  }
+ ]
+}

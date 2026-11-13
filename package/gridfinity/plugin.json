@@ -1,0 +1,49 @@
+{
+  "id": "gridfinity",
+  "name": "Gridfinity",
+  "version": "0.1.0",
+  "description": "Gridfinity bins (feet, stacking lip, magnet/screw holes, dividers) and baseplates as ordinary editable features.",
+  "capabilities": ["commands@0.1"],
+  "runtime": {
+    "module": "plugin.wasm",
+    "entries": [
+      {
+        "name": "bin",
+        "effect": "edit",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "width": {"type": "integer", "minimum": 1, "maximum": 12, "description": "Cells along X (42 mm each)"},
+            "depth": {"type": "integer", "minimum": 1, "maximum": 12, "description": "Cells along Y (42 mm each)"},
+            "height": {"type": "integer", "minimum": 2, "maximum": 20, "description": "Height units (7 mm each)"},
+            "magnets": {"type": "boolean", "description": "6.5 x 2.4 mm magnet holes in every foot"},
+            "screws": {"type": "boolean", "description": "3 mm screw holes in every foot"},
+            "dividers_x": {"type": "integer", "minimum": 0, "maximum": 10, "description": "Dividers across X"},
+            "dividers_y": {"type": "integer", "minimum": 0, "maximum": 10, "description": "Dividers across Y"},
+            "stacking_lip": {"type": "boolean", "description": "Stacking lip on top (default on)"},
+            "origin": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Corner [x, y] in mm"},
+            "name": {"type": "string", "maxLength": 60, "description": "Body name"}
+          }
+        },
+        "slots": [{"kind": "menu", "name": "Gridfinity bin"}]
+      },
+      {
+        "name": "baseplate",
+        "effect": "edit",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "width": {"type": "integer", "minimum": 1, "maximum": 12, "description": "Cells along X (42 mm each)"},
+            "depth": {"type": "integer", "minimum": 1, "maximum": 12, "description": "Cells along Y (42 mm each)"},
+            "magnets": {"type": "boolean", "description": "6.5 x 2.4 mm magnet holes in every pocket"},
+            "origin": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2, "description": "Corner [x, y] in mm"},
+            "name": {"type": "string", "maxLength": 60, "description": "Body name"}
+          }
+        },
+        "slots": [{"kind": "menu", "name": "Gridfinity baseplate"}]
+      }
+    ],
+    "commands": ["sketch.create", "sketch.rectangle.rounded", "sketch.circle.center", "sketch.finish", "solid.extrude", "solid.box"],
+    "limits": {"fuel": 2000000000, "memory_mib": 64, "deadline_ms": 30000}
+  }
+}

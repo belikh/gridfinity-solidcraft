@@ -1,0 +1,11 @@
+# local working files
+NOTES.md
+tools/
+.venv/
+out/
+plugin/target/
+gen/__pycache__/
+package/*.zip
+# third-party reference copies (see research/SPEC.md for the sources)
+research/*
+!research/SPEC.md

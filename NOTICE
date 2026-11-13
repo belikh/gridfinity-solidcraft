@@ -1,0 +1,7 @@
+plugin/wit/plugin.wit is the plugin interface (WIT package craft:plugin@0.1.0) published by
+SolidCraft, https://github.com/tangency-labs/solidcraft, under the Apache License 2.0. It is
+included unchanged so the plugin can be built.
+
+Gridfinity is by Zack Freedman. The dimensions in research/SPEC.md are taken from
+gridfinity-rebuilt-openscad by Kenneth Hodson (MIT), https://github.com/kennetek/gridfinity-rebuilt-openscad.
+No code from either project is included.

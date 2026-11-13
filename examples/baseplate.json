@@ -1,0 +1,6 @@
+{"commands": [{"command": "plugin.run", "params": {
+  "path": "/path/to/plugins/gridfinity",
+  "approval": "<approval hash from plugin.inspect>",
+  "entry": "baseplate",
+  "params": {"width": 4, "depth": 3, "magnets": true}
+}}]}
