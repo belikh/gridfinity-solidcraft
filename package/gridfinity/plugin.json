@@ -123,19 +123,21 @@
             },
             "custom_size_x": {
               "type": "number",
-              "title": "Custom cell X (mm, Custom only)",
-              "description": "Cell size along X when Grid size is Custom; ignored otherwise",
+              "title": "Custom cell X",
+              "description": "Cell size along X, only used when Grid size is Custom",
               "minimum": 15,
               "maximum": 100,
-              "default": 42
+              "default": 42,
+              "unit": "mm"
             },
             "custom_size_y": {
               "type": "number",
-              "title": "Custom cell Y (mm, Custom only)",
-              "description": "Cell size along Y when Grid size is Custom; ignored otherwise",
+              "title": "Custom cell Y",
+              "description": "Cell size along Y, only used when Grid size is Custom",
               "minimum": 15,
               "maximum": 100,
-              "default": 42
+              "default": 42,
+              "unit": "mm"
             }
           }
         },
@@ -223,19 +225,21 @@
             },
             "custom_size_x": {
               "type": "number",
-              "title": "Custom cell X (mm, Custom only)",
-              "description": "Cell size along X when Grid size is Custom; ignored otherwise",
+              "title": "Custom cell X",
+              "description": "Cell size along X, only used when Grid size is Custom",
               "minimum": 15,
               "maximum": 100,
-              "default": 42
+              "default": 42,
+              "unit": "mm"
             },
             "custom_size_y": {
               "type": "number",
-              "title": "Custom cell Y (mm, Custom only)",
-              "description": "Cell size along Y when Grid size is Custom; ignored otherwise",
+              "title": "Custom cell Y",
+              "description": "Cell size along Y, only used when Grid size is Custom",
               "minimum": 15,
               "maximum": 100,
-              "default": 42
+              "default": 42,
+              "unit": "mm"
             }
           }
         },
