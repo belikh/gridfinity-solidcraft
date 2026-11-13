@@ -1,8 +1,8 @@
 {
   "id": "gridfinity",
   "name": "Gridfinity",
-  "version": "0.3.0",
-  "description": "Gridfinity bins (hollow or solid for custom cutouts) and baseplates, full or half grid, with feet, stacking lip, holes and dividers.",
+  "version": "0.4.0",
+  "description": "Gridfinity bins (hollow or solid for custom cutouts) and baseplates, full, half or custom grid, with feet, stacking lip, holes and dividers.",
   "capabilities": [
     "commands@0.1"
   ],
@@ -25,7 +25,7 @@
             "width": {
               "type": "integer",
               "title": "Width (cells)",
-              "description": "Cells along X (42 mm, or 21 mm on the half grid; at most 12 full or 24 half)",
+              "description": "Cells along X (42 mm, 21 mm on the half grid, or the custom size; at most 504 mm and 24 cells)",
               "minimum": 1,
               "maximum": 24,
               "default": 1
@@ -33,7 +33,7 @@
             "depth": {
               "type": "integer",
               "title": "Depth (cells)",
-              "description": "Cells along Y (42 mm, or 21 mm on the half grid; at most 12 full or 24 half)",
+              "description": "Cells along Y (42 mm, 21 mm on the half grid, or the custom size; at most 504 mm and 24 cells)",
               "minimum": 1,
               "maximum": 24,
               "default": 1
@@ -103,10 +103,11 @@
             "grid": {
               "type": "string",
               "title": "Grid size",
-              "description": "Full: 42 mm feet. Half: 21 mm feet, four fit in one baseplate pocket",
+              "description": "Full: 42 mm feet. Half: 21 mm feet, four fit in one baseplate pocket. Custom: your own cell size, set below (fits only other parts with the same size)",
               "enum": [
                 "42 mm (full)",
-                "21 mm (half)"
+                "21 mm (half)",
+                "Custom (sizes below)"
               ],
               "default": "42 mm (full)"
             },
@@ -119,6 +120,22 @@
                 "Solid (for custom cutouts)"
               ],
               "default": "Hollow"
+            },
+            "custom_size_x": {
+              "type": "number",
+              "title": "Custom cell X (mm, Custom only)",
+              "description": "Cell size along X when Grid size is Custom; ignored otherwise",
+              "minimum": 15,
+              "maximum": 100,
+              "default": 42
+            },
+            "custom_size_y": {
+              "type": "number",
+              "title": "Custom cell Y (mm, Custom only)",
+              "description": "Cell size along Y when Grid size is Custom; ignored otherwise",
+              "minimum": 15,
+              "maximum": 100,
+              "default": 42
             }
           }
         },
@@ -144,7 +161,7 @@
             "width": {
               "type": "integer",
               "title": "Width (cells)",
-              "description": "Cells along X (42 mm, or 21 mm on the half grid; at most 12 full or 24 half)",
+              "description": "Cells along X (42 mm, 21 mm on the half grid, or the custom size; at most 504 mm and 24 cells)",
               "minimum": 1,
               "maximum": 24,
               "default": 3
@@ -152,7 +169,7 @@
             "depth": {
               "type": "integer",
               "title": "Depth (cells)",
-              "description": "Cells along Y (42 mm, or 21 mm on the half grid; at most 12 full or 24 half)",
+              "description": "Cells along Y (42 mm, 21 mm on the half grid, or the custom size; at most 504 mm and 24 cells)",
               "minimum": 1,
               "maximum": 24,
               "default": 3
@@ -186,10 +203,11 @@
             "grid": {
               "type": "string",
               "title": "Grid size",
-              "description": "Full: 42 mm pockets. Half: 21 mm pockets",
+              "description": "Full: 42 mm pockets. Half: 21 mm pockets. Custom: your own cell size, set below (fits only other parts with the same size)",
               "enum": [
                 "42 mm (full)",
-                "21 mm (half)"
+                "21 mm (half)",
+                "Custom (sizes below)"
               ],
               "default": "42 mm (full)"
             },
@@ -202,6 +220,22 @@
                 "Open (frame only)"
               ],
               "default": "Solid"
+            },
+            "custom_size_x": {
+              "type": "number",
+              "title": "Custom cell X (mm, Custom only)",
+              "description": "Cell size along X when Grid size is Custom; ignored otherwise",
+              "minimum": 15,
+              "maximum": 100,
+              "default": 42
+            },
+            "custom_size_y": {
+              "type": "number",
+              "title": "Custom cell Y (mm, Custom only)",
+              "description": "Cell size along Y when Grid size is Custom; ignored otherwise",
+              "minimum": 15,
+              "maximum": 100,
+              "default": 42
             }
           }
         },

@@ -13,7 +13,12 @@ mod bindings {
     wit_bindgen::generate!({ world: "command-plugin", path: "wit" });
 }
 
-const MAX_CELLS: u64 = 12;
+/// Largest bin or baseplate side: 12 full cells (504 mm), and never more than 24 cells.
+const MAX_SIDE: f64 = 504.0;
+const MAX_CELLS: u64 = 24;
+/// Custom cell sizes allowed (mm).
+const CUSTOM_MIN: f64 = 15.0;
+const CUSTOM_MAX: f64 = 100.0;
 const MAX_UNITS: u64 = 20;
 const MAX_DIVIDERS: u64 = 10;
 
@@ -77,21 +82,47 @@ fn get_name(p: &Map<String, Value>, default: &str) -> Result<String, String> {
     }
 }
 
-/// "42 mm (full)" / "21 mm (half)" as the dialog offers them; scripts may say "full" / "half".
-fn get_pitch(p: &Map<String, Value>) -> Result<f64, String> {
-    match p.get("grid") {
+const GRID_ERR: &str = "grid must be \"42 mm (full)\", \"21 mm (half)\" or \"Custom\"";
+
+/// Cell size along X and Y. "42 mm (full)" / "21 mm (half)" / "Custom (sizes below)" as the
+/// dialog offers them; scripts may say "full" / "half" / "custom". Custom takes custom_size_x
+/// and custom_size_y (mm), which are ignored otherwise.
+fn get_pitch(p: &Map<String, Value>) -> Result<[f64; 2], String> {
+    let s = match p.get("grid") {
+        None | Some(Value::Null) => return Ok([PITCH; 2]),
+        Some(Value::String(s)) => s.to_ascii_lowercase(),
+        _ => return Err(GRID_ERR.into()),
+    };
+    if s.contains("half") || s.starts_with("21") {
+        return Ok([HALF_PITCH; 2]);
+    }
+    if s.contains("full") || s.starts_with("42") {
+        return Ok([PITCH; 2]);
+    }
+    if !s.starts_with("custom") {
+        return Err(GRID_ERR.into());
+    }
+    let size = |key: &str| match p.get(key) {
         None | Some(Value::Null) => Ok(PITCH),
-        Some(Value::String(s)) => {
-            let s = s.to_ascii_lowercase();
-            if s.contains("half") || s.starts_with("21") {
-                Ok(HALF_PITCH)
-            } else if s.contains("full") || s.starts_with("42") {
-                Ok(PITCH)
-            } else {
-                Err("grid must be \"42 mm (full)\" or \"21 mm (half)\"".into())
-            }
-        }
-        _ => Err("grid must be \"42 mm (full)\" or \"21 mm (half)\"".into()),
+        Some(v) => v.as_f64().filter(|n| (CUSTOM_MIN..=CUSTOM_MAX).contains(n))
+            .ok_or(format!("{key} must be from {CUSTOM_MIN} to {CUSTOM_MAX} mm")),
+    };
+    Ok([size("custom_size_x")?, size("custom_size_y")?])
+}
+
+/// Most cells that fit in MAX_SIDE at this cell size.
+fn max_cells(pitch: f64) -> u64 {
+    ((MAX_SIDE / pitch + 1e-9).floor() as u64).clamp(1, MAX_CELLS)
+}
+
+/// " half", " 40x45 mm" or "" for the automatic body name.
+fn grid_label(pitch: [f64; 2]) -> String {
+    if pitch == [PITCH; 2] {
+        String::new()
+    } else if pitch == [HALF_PITCH; 2] {
+        " half".into()
+    } else {
+        format!(" {}x{} mm", pitch[0], pitch[1])
     }
 }
 
@@ -99,12 +130,11 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
     let empty = Map::new();
     let p = params.as_object().unwrap_or(&empty);
     let pitch = get_pitch(p)?;
-    // a half-grid bin may use twice as many cells for the same overall size
-    let max_cells = if pitch == HALF_PITCH { MAX_CELLS * 2 } else { MAX_CELLS };
-    let nx = get_u(p, "width", 1, 1, max_cells)?;
-    let ny = get_u(p, "depth", 1, 1, max_cells)?;
+    // smaller cells may be more of them for the same overall size
+    let nx = get_u(p, "width", 1, 1, max_cells(pitch[0]))?;
+    let ny = get_u(p, "depth", 1, 1, max_cells(pitch[1]))?;
     let units = get_u(p, "height", 3, 2, MAX_UNITS)?;
-    let half = if pitch == HALF_PITCH { " half" } else { "" };
+    let half = grid_label(pitch);
     Ok(BinOptions {
         nx,
         ny,
@@ -130,9 +160,8 @@ pub fn parse_baseplate(params: &Value) -> Result<BaseplateOptions, String> {
     let empty = Map::new();
     let p = params.as_object().unwrap_or(&empty);
     let pitch = get_pitch(p)?;
-    let max_cells = if pitch == HALF_PITCH { MAX_CELLS * 2 } else { MAX_CELLS };
-    let nx = get_u(p, "width", 3, 1, max_cells)?;
-    let ny = get_u(p, "depth", 3, 1, max_cells)?;
+    let nx = get_u(p, "width", 3, 1, max_cells(pitch[0]))?;
+    let ny = get_u(p, "depth", 3, 1, max_cells(pitch[1]))?;
     let open = match p.get("bottom") {
         None | Some(Value::Null) => false,
         Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("open") => true,
@@ -143,7 +172,7 @@ pub fn parse_baseplate(params: &Value) -> Result<BaseplateOptions, String> {
     if open && magnets {
         return Err("magnet holes need a solid bottom: choose Bottom \"Solid\" or turn Magnet holes off".into());
     }
-    let half = if pitch == HALF_PITCH { " half" } else { "" };
+    let half = grid_label(pitch);
     let frame = if open { " frame" } else { "" };
     Ok(BaseplateOptions {
         nx,
@@ -218,18 +247,32 @@ mod tests {
         assert_eq!((o.origin, o.name.as_str()), ([5.0, 0.0], "Tray"));
         assert!(parse_baseplate(&json!({"holes_magnet": true})).unwrap().magnets);
         let h = parse_bin(&json!({"grid": "21 mm (half)", "width": 24})).unwrap();
-        assert_eq!((h.pitch, h.nx, h.name.as_str()), (HALF_PITCH, 24, "Gridfinity half bin 24x1x3"));
-        assert_eq!(parse_bin(&json!({"grid": "42 mm (full)"})).unwrap().pitch, PITCH);
+        assert_eq!((h.pitch, h.nx, h.name.as_str()), ([HALF_PITCH; 2], 24, "Gridfinity half bin 24x1x3"));
+        assert_eq!(parse_bin(&json!({"grid": "42 mm (full)"})).unwrap().pitch, [PITCH; 2]);
         assert!(parse_bin(&json!({"grid": "huge"})).is_err());
         assert!(parse_bin(&json!({"width": 13})).is_err());
         assert!(parse_bin(&json!({"inside": "Solid (for custom cutouts)"})).unwrap().solid);
         assert!(!parse_bin(&json!({"inside": "Hollow"})).unwrap().solid);
         assert!(parse_bin(&json!({"inside": "liquid"})).is_err());
         let b = parse_baseplate(&json!({"grid": "21 mm (half)", "bottom": "Open (frame only)", "width": 4})).unwrap();
-        assert_eq!((b.pitch, b.open, b.name.as_str()), (HALF_PITCH, true, "Gridfinity half baseplate frame 4x3"));
+        assert_eq!((b.pitch, b.open, b.name.as_str()), ([HALF_PITCH; 2], true, "Gridfinity half baseplate frame 4x3"));
         assert!(parse_baseplate(&json!({"bottom": "Open (frame only)", "holes_magnet": true})).is_err());
         let (name, cmds) = plan("baseplate", &json!({"width": 2, "depth": 2, "magnets": true})).unwrap();
         assert_eq!(name, "Gridfinity baseplate 2x2");
         assert!(!cmds.is_empty());
+        // custom cell sizes
+        let c = parse_bin(&json!({"grid": "Custom (sizes below)", "custom_size_x": 40, "custom_size_y": 45.5, "width": 2})).unwrap();
+        assert_eq!((c.pitch, c.name.as_str()), ([40.0, 45.5], "Gridfinity 40x45.5 mm bin 2x1x3"));
+        assert_eq!(parse_bin(&json!({"grid": "custom"})).unwrap().pitch, [PITCH; 2]);
+        // the custom sizes only count when Custom is chosen
+        assert_eq!(parse_bin(&json!({"grid": "42 mm (full)", "custom_size_x": 30})).unwrap().pitch, [PITCH; 2]);
+        assert!(parse_bin(&json!({"grid": "custom", "custom_size_x": 14})).is_err());
+        assert!(parse_bin(&json!({"grid": "custom", "custom_size_y": 101})).is_err());
+        // 504 mm at most: 20 cells of 25 mm, 5 of 100 mm
+        assert!(parse_bin(&json!({"grid": "custom", "custom_size_x": 25, "width": 20})).is_ok());
+        assert!(parse_bin(&json!({"grid": "custom", "custom_size_x": 25, "width": 21})).is_err());
+        assert!(parse_baseplate(&json!({"grid": "custom", "custom_size_y": 100, "depth": 6})).is_err());
+        let b = parse_baseplate(&json!({"grid": "custom", "custom_size_x": 50, "custom_size_y": 30})).unwrap();
+        assert_eq!(b.name, "Gridfinity 50x30 mm baseplate 3x3");
     }
 }
