@@ -18,9 +18,10 @@ Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-opens
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
 measuring its cross-sections. Not yet printed: please report how it fits.
 
-> Status: early (0.1.1). Works from the plugin menu in the SolidCraft 0.41.0 desktop app (a form with
-> the fields below) and from scripts/`solidcraft-cli`. SolidCraft's plugin runtime is itself
-> experimental, so other versions may refuse the package.
+> Status: early (0.1.1). Tested with SolidCraft 0.41.0 through scripts/`solidcraft-cli`. The input
+> schema follows the rules the desktop app's plugin dialog uses to draw a form, but running it from
+> the desktop menu is not confirmed yet. SolidCraft's plugin runtime is itself experimental, so other
+> versions may refuse the package.
 
 ## Install
 Download `gridfinity-0.1.1.zip` from the [latest release](../../releases/latest), then in SolidCraft:
