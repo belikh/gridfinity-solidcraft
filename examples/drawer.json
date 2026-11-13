@@ -1,0 +1,6 @@
+{"commands": [{"command": "plugin.run", "params": {
+  "path": "/path/to/plugins/gridfinity",
+  "approval": "<approval hash from plugin.inspect>",
+  "entry": "drawer",
+  "params": {"drawer_width": 400, "drawer_depth": 300, "printer_x": 256, "printer_y": 256}
+}}]}

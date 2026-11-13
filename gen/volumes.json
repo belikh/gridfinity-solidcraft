@@ -1,0 +1,15 @@
+{
+  "note": "Volumes (mm3) SolidCraft 0.41.0 reports for plugin runs. 0.5.0 builds the cells differently (one cell made and repeated); every shape here measured the same as 0.4.0 / gen/gridfinity.py to within 1e-6 mm3. half-4x4 and half-open-4x2 were compared from their STL exports instead.",
+  "runs": [
+    {"entry": "bin", "params": {"width": 2, "depth": 1, "height": 3, "holes_magnet": true, "dividers_x": 1}, "volume": 23799.4611},
+    {"entry": "baseplate", "params": {"width": 3, "depth": 2, "holes_magnet": true}, "volume": 38008.2673},
+    {"entry": "bin", "params": {"width": 3, "depth": 2, "height": 6, "holes_magnet": true, "holes_screw": true, "dividers_x": 2, "dividers_y": 1}, "volume": 81117.6537},
+    {"entry": "bin", "params": {"grid": "21 mm (half)", "width": 3, "depth": 3, "height": 3, "holes_magnet": true}, "volume": 22300.4840},
+    {"entry": "bin", "params": {"grid": "custom", "custom_size_x": 40, "custom_size_y": 25, "width": 2, "depth": 1, "height": 3, "holes_magnet": true, "dividers_x": 1}, "volume": 14407.8061},
+    {"entry": "baseplate", "params": {"grid": "custom", "custom_size_x": 40, "custom_size_y": 25, "width": 2, "depth": 2, "holes_magnet": true}, "volume": 15414.7768},
+    {"entry": "baseplate", "params": {"grid": "custom", "custom_size_x": 40, "custom_size_y": 25, "width": 2, "depth": 2, "bottom": "Open (frame only)"}, "volume": 3893.7821},
+    {"entry": "bin", "params": {"grid": "custom", "custom_size_x": 15, "custom_size_y": 15, "width": 2, "depth": 2, "height": 2, "inside": "Solid (for custom cutouts)", "holes_magnet": true}, "volume": 10616.2790},
+    {"entry": "baseplate", "params": {"grid": "21 mm (half)", "width": 4, "depth": 4, "holes_magnet": true}, "stl_volume": 30147.235},
+    {"entry": "baseplate", "params": {"grid": "21 mm (half)", "width": 4, "depth": 2, "bottom": "Open (frame only)"}, "stl_volume": 4934.795}
+  ]
+}

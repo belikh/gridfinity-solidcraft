@@ -1,11 +1,13 @@
 //! Gridfinity plugin for SolidCraft: entries `bin` and `baseplate` build
 //! ordinary, editable SolidCraft features through the host's command API.
 
+pub mod drawer;
 pub mod geometry;
+pub mod plate;
 
+use drawer::{drawer_commands, DrawerOptions, Filler};
 use geometry::{baseplate_commands, bin_commands, BaseplateOptions, BinOptions, HALF_PITCH, PITCH};
 use serde_json::{Map, Value};
-#[cfg(any(test, target_arch = "wasm32"))]
 use serde_json::json;
 
 #[cfg(target_arch = "wasm32")]
@@ -185,12 +187,216 @@ pub fn parse_baseplate(params: &Value) -> Result<BaseplateOptions, String> {
     })
 }
 
+/// Largest drawer side (mm).
+const MAX_DRAWER: f64 = 1000.0;
+
+/// SolidCraft gives a plugin run 30 s, and the time goes mostly on joining the cells, about
+/// 0.15 s a cell, and more with magnet holes, on a 4-core desktop (10 x 10 cells: 16 s, 6 x 6
+/// with magnet holes: 15 s, 8 x 8 with them: over 30 s). These keep a run within the limit.
+const MAX_CELLS_RUN: u32 = 100;
+const MAX_CELLS_RUN_MAGNETS: u32 = 42;
+
+fn check_time(cells: u32, magnets: bool, what: &str) -> Result<(), String> {
+    let max = if magnets { MAX_CELLS_RUN_MAGNETS } else { MAX_CELLS_RUN };
+    if cells > max {
+        let with = if magnets { " with magnet holes" } else { "" };
+        return Err(format!(
+            "{cells} cells is too many for one run: SolidCraft gives a plugin 30 seconds, which is about {max} cells{with}. {what}"
+        ));
+    }
+    Ok(())
+}
+
+fn get_mm(p: &Map<String, Value>, key: &str, default: f64, min: f64, max: f64) -> Result<f64, String> {
+    match p.get(key) {
+        None | Some(Value::Null) => Ok(default),
+        Some(v) => v.as_f64().filter(|n| (min..=max).contains(n)).ok_or(format!("{key} must be from {min} to {max} mm")),
+    }
+}
+
+fn get_filler(p: &Map<String, Value>, key: &str, low: &str, high: &str) -> Result<Filler, String> {
+    match p.get(key) {
+        None | Some(Value::Null) => Ok(Filler::Even),
+        Some(Value::String(s)) => {
+            let s = s.to_ascii_lowercase();
+            if s.starts_with("even") || s.starts_with("both") {
+                Ok(Filler::Even)
+            } else if s.starts_with(low) {
+                Ok(Filler::Low)
+            } else if s.starts_with(high) {
+                Ok(Filler::High)
+            } else {
+                Err(format!("{key} must be \"Even (both sides)\", \"{low}\" or \"{high}\""))
+            }
+        }
+        _ => Err(format!("{key} must be a choice from the list")),
+    }
+}
+
+pub fn parse_drawer(params: &Value) -> Result<DrawerOptions, String> {
+    let empty = Map::new();
+    let p = params.as_object().unwrap_or(&empty);
+    let pitch = get_pitch(p)?;
+    let drawer = [get_mm(p, "drawer_width", 300.0, 15.0, MAX_DRAWER)?, get_mm(p, "drawer_depth", 300.0, 15.0, MAX_DRAWER)?];
+    let bed = [get_mm(p, "printer_x", 256.0, 50.0, MAX_DRAWER)?, get_mm(p, "printer_y", 256.0, 50.0, MAX_DRAWER)?];
+    let open = match p.get("bottom") {
+        None | Some(Value::Null) => false,
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("open") => true,
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("solid") => false,
+        _ => return Err("bottom must be \"Solid\" or \"Open (frame only)\"".into()),
+    };
+    let magnets = get_b(p, &["holes_magnet", "magnets"], false)?;
+    if open && magnets {
+        return Err("magnet holes need a solid bottom: choose Bottom \"Solid\" or turn Magnet holes off".into());
+    }
+    let piece = get_u(p, "piece", 0, 0, 999)?;
+    let half = grid_label(pitch);
+    Ok(DrawerOptions {
+        drawer,
+        bed,
+        pitch,
+        filler: [get_filler(p, "filler_x", "left", "right")?, get_filler(p, "filler_y", "front", "back")?],
+        open,
+        magnets,
+        origin: get_origin(p)?,
+        name: get_name(p, &format!("Gridfinity{half} drawer {}x{}", drawer[0], drawer[1]))?,
+        piece,
+    })
+}
+
+/// Turns the plan's commands into the ones SolidCraft runs, using what earlier ones reported:
+/// `@pattern` becomes `sketch.pattern.rectangular` over the curves drawn since the sketch began
+/// (or the last pattern), `@created` in a body list becomes the bodies the last command made,
+/// and body and sketch names become the ones SolidCraft actually gave (a second bin with the
+/// same name gets another, and must not change the first).
+#[derive(Default)]
+pub struct Runner {
+    drawn: Vec<Value>,
+    created: Vec<Value>,
+    bodies: std::collections::HashMap<String, String>,
+    sketches: std::collections::HashMap<String, Value>,
+}
+
+impl Runner {
+    pub fn prepare(&self, c: &Value) -> (String, Value) {
+        let name = c["command"].as_str().unwrap_or_default();
+        if name == "@pattern" {
+            return ("sketch.pattern.rectangular".into(), pattern_args(&c["params"], &self.drawn));
+        }
+        let mut p = c["params"].clone();
+        let body = |v: &str| self.bodies.get(v).cloned().unwrap_or_else(|| v.to_string());
+        for key in ["targets", "bodies", "tools"] {
+            if let Some(Value::Array(list)) = p.get(key) {
+                let mut out = Vec::new();
+                for v in list {
+                    match v.as_str() {
+                        Some("@created") => out.extend(self.created.iter().cloned()),
+                        Some("@last") => out.extend(self.created.last().cloned()),
+                        Some(s) => out.push(json!(body(s))),
+                        None => out.push(v.clone()),
+                    }
+                }
+                p[key] = json!(out);
+            }
+        }
+        for key in ["target", "body"] {
+            if let Some(s) = p.get(key).and_then(|v| v.as_str()) {
+                p[key] = json!(body(s));
+            }
+        }
+        if let Some(s) = p.get("sketch").and_then(|v| v.as_str()) {
+            if let Some(id) = self.sketches.get(s) {
+                p["sketch"] = id.clone();
+            }
+        }
+        (name.to_string(), p)
+    }
+
+    pub fn record(&mut self, c: &Value, reply: &Value) {
+        let name = c["command"].as_str().unwrap_or_default();
+        let reply = reply.get("result").filter(|r| r.is_object()).unwrap_or(reply);
+        match name {
+            "@pattern" => self.drawn.clear(),
+            "sketch.create" => {
+                self.drawn.clear();
+                if let (Some(n), Some(id)) = (c["params"]["name"].as_str(), reply.get("sketch")) {
+                    self.sketches.insert(n.to_string(), id.clone());
+                }
+            }
+            "sketch.finish" => {}
+            n if n.starts_with("sketch.") => {
+                if let Some(Value::Array(ids)) = reply.pointer("/created/curves") {
+                    self.drawn.extend(ids.iter().cloned());
+                }
+            }
+            _ => {}
+        }
+        if let Some(Value::Array(made)) = reply.get("created_bodies") {
+            // `@created` / `@last`: the copies the last body pattern made
+            if name == "solid.pattern.rectangular" {
+                self.created = made.clone();
+            }
+            // the body this command asked to make, by the name SolidCraft gave it
+            if let (Some(asked), Some(Value::String(got))) = (c["params"]["body_name"].as_str(), made.first()) {
+                self.bodies.insert(asked.to_string(), got.clone());
+            }
+        }
+    }
+}
+
+/// `sketch.pattern.rectangular`'s arguments for an `@pattern` step over the curves `ids`.
+pub fn pattern_args(p: &Value, ids: &[Value]) -> Value {
+    let (n1, n2) = (p["count"].as_u64().unwrap_or(1), p["count2"].as_u64().unwrap_or(1));
+    if n1 == 1 {
+        // only along Y
+        json!({"entities": ids, "count": n2, "spacing": p["spacing2"], "dir": [0, 1]})
+    } else if n2 == 1 {
+        json!({"entities": ids, "count": n1, "spacing": p["spacing"]})
+    } else {
+        json!({"entities": ids, "count": n1, "spacing": p["spacing"], "count2": n2, "spacing2": p["spacing2"]})
+    }
+}
+
 /// The command list for an entry, or a message saying what is wrong with the input.
 pub fn plan(entry: &str, params: &Value) -> Result<(String, Vec<Value>), String> {
     match entry {
-        "bin" => parse_bin(params).map(|o| (o.name.clone(), bin_commands(&o))),
-        "baseplate" => parse_baseplate(params).map(|o| (o.name.clone(), baseplate_commands(&o))),
-        other => Err(format!("unknown entry `{other}` (use `bin` or `baseplate`)")),
+        "bin" => {
+            let o = parse_bin(params)?;
+            // holes make the feet slower to join: screw holes (which reach into the block) most
+            let weight = 1.0 + if o.magnets { 0.6 } else { 0.0 } + if o.screws { 2.0 } else { 0.0 };
+            let cells = o.nx * o.ny;
+            if cells as f64 * weight > MAX_CELLS_RUN as f64 {
+                let fit = (MAX_CELLS_RUN as f64 / weight).floor();
+                let with = match (o.magnets, o.screws) {
+                    (true, true) => " with magnet and screw holes",
+                    (true, false) => " with magnet holes",
+                    (false, true) => " with screw holes",
+                    _ => "",
+                };
+                return Err(format!("{cells} cells is too many for one run: SolidCraft gives a plugin 30 seconds, \
+                    which is about {fit} cells{with}. Make a smaller bin."));
+            }
+            Ok((o.name.clone(), bin_commands(&o)))
+        }
+        "baseplate" => {
+            let o = parse_baseplate(params)?;
+            check_time(o.nx * o.ny, o.magnets && !o.open,
+                "Use Gridfinity drawer baseplate, which splits it into pieces and can build them one at a time.")?;
+            Ok((o.name.clone(), baseplate_commands(&o)))
+        }
+        "drawer" => {
+            let o = parse_drawer(params)?;
+            let (pl, c) = drawer_commands(&o)?;
+            let count = pl.axes[0].pieces.len() * pl.axes[1].pieces.len();
+            let built = drawer::built_cells(&o, &pl);
+            check_time(built, o.magnets && !o.open, &if o.piece == 0 {
+                format!("This drawer is {count} pieces: set Piece to 1, 2, ... {count} and run once for each.")
+            } else {
+                "Use a smaller printer size, so the pieces get smaller.".to_string()
+            })?;
+            Ok((o.name.clone(), c))
+        }
+        other => Err(format!("unknown entry `{other}` (use `bin`, `baseplate` or `drawer`)")),
     }
 }
 
@@ -211,13 +417,18 @@ mod guest {
             let (body, cmds) = plan(&entry, &params)
                 .map_err(|reason| PluginError::InvalidInput(FieldFailure { field: entry.clone(), reason }))?;
             let total = cmds.len();
+            let mut run = Runner::default();
             for (i, c) in cmds.iter().enumerate() {
-                if control::cancelled() {
-                    return Err(PluginError::Cancelled);
+                // progress and cancel checks are host calls too, and a run may make only 256
+                if i % 16 == 0 {
+                    if control::cancelled() {
+                        return Err(PluginError::Cancelled);
+                    }
+                    control::progress(i as f32 / total as f32, &format!("Gridfinity: step {} of {total}", i + 1));
                 }
-                control::progress(i as f32 / total as f32, &format!("Gridfinity: step {} of {total}", i + 1));
-                let name = c["command"].as_str().unwrap_or_default();
-                commands::run(name, &c["params"].to_string())?;
+                let (name, args) = run.prepare(c);
+                let reply = commands::run(&name, &args.to_string())?;
+                run.record(c, &serde_json::from_str(&reply).unwrap_or(Value::Null));
             }
             Ok(json!({"body": body, "commands": total}).to_string())
         }
@@ -274,5 +485,22 @@ mod tests {
         assert!(parse_baseplate(&json!({"grid": "custom", "custom_size_y": 100, "depth": 6})).is_err());
         let b = parse_baseplate(&json!({"grid": "custom", "custom_size_x": 50, "custom_size_y": 30})).unwrap();
         assert_eq!(b.name, "Gridfinity 50x30 mm baseplate 3x3");
+    }
+
+    #[test]
+    fn runs_that_would_take_too_long_say_what_to_do() {
+        assert!(plan("baseplate", &json!({"width": 10, "depth": 10})).is_ok());
+        let e = plan("baseplate", &json!({"width": 12, "depth": 12})).unwrap_err();
+        assert!(e.contains("144 cells") && e.contains("drawer baseplate"));
+        assert!(plan("baseplate", &json!({"width": 7, "depth": 7, "holes_magnet": true})).is_err());
+        assert!(plan("bin", &json!({"width": 7, "depth": 6, "holes_magnet": true})).is_ok());
+        assert!(plan("bin", &json!({"width": 7, "depth": 6, "holes_magnet": true, "holes_screw": true})).unwrap_err().contains("27 cells"));
+        // a big drawer: all at once is too much, but it says how to build it piece by piece
+        let d = json!({"drawer_width": 600, "drawer_depth": 500, "holes_magnet": true});
+        let e = plan("drawer", &d).unwrap_err();
+        assert!(e.contains("set Piece to 1, 2"), "{e}");
+        let mut one = d.clone();
+        one["piece"] = json!(1);
+        assert!(plan("drawer", &one).is_ok());
     }
 }
