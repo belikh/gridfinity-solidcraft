@@ -18,15 +18,16 @@ Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-opens
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
 measuring its cross-sections. Not yet printed: please report how it fits.
 
-> Status: early (0.1.0). Tested with SolidCraft 0.41.0 through `solidcraft-cli`; SolidCraft's plugin
-> runtime is itself experimental, so other versions may refuse the package.
+> Status: early (0.1.1). Works from the plugin menu in the SolidCraft 0.41.0 desktop app (a form with
+> the fields below) and from scripts/`solidcraft-cli`. SolidCraft's plugin runtime is itself
+> experimental, so other versions may refuse the package.
 
 ## Install
-Download `gridfinity-0.1.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
+Download `gridfinity-0.1.1.zip` from the [latest release](../../releases/latest), then in SolidCraft:
 **Preferences › Plugins › Install plugin…** and pick the zip. From a script:
 
 ```json
-{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.1.0.zip"}}]}
+{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.1.1.zip"}}]}
 ```
 
 Add `"replace": true` to update an installed version. You can also unpack the zip into
@@ -49,8 +50,10 @@ run an entry with that hash ([examples/](examples/)).
 
 | Entry | Parameters (default) |
 |---|---|
-| `bin` | `width` 1–12 (1), `depth` 1–12 (1), `height` 2–20 units (3), `magnets` (false), `screws` (false), `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `stacking_lip` (true), `origin` [x, y] mm ([0, 0]), `name` |
-| `baseplate` | `width` 1–12 (3), `depth` 1–12 (3), `magnets` (false), `origin` [x, y] mm, `name` |
+| `bin` | `width` 1–12 (1), `depth` 1–12 (1), `height` 2–20 units (3), `magnets` (false), `screws` (false), `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `stacking_lip` (true), `origin_x`, `origin_y` mm (0), `name` |
+| `baseplate` | `width` 1–12 (3), `depth` 1–12 (3), `magnets` (false), `origin_x`, `origin_y` mm (0), `name` |
+
+Scripts may also pass `origin` as `[x, y]`.
 
 Choices that differ slightly from the spec: the stacking lip has a 0.3 mm flat on top instead of a
 knife edge, the floor inside a bin is at 6 mm, and baseplate pockets keep a 0.05 mm rim between

@@ -34,6 +34,17 @@ fn get_b(p: &Map<String, Value>, key: &str, default: bool) -> Result<bool, Strin
 }
 
 fn get_origin(p: &Map<String, Value>) -> Result<[f64; 2], String> {
+    // The desktop dialog sends origin_x / origin_y (it draws no list fields); scripts may use origin.
+    let num = |k: &str| -> Result<Option<f64>, String> {
+        match p.get(k) {
+            None | Some(Value::Null) => Ok(None),
+            Some(v) => v.as_f64().filter(|n| n.is_finite()).map(Some).ok_or(format!("{k} must be a number (mm)")),
+        }
+    };
+    let (ox, oy) = (num("origin_x")?, num("origin_y")?);
+    if ox.is_some() || oy.is_some() {
+        return Ok([ox.unwrap_or(0.0), oy.unwrap_or(0.0)]);
+    }
     match p.get("origin") {
         None | Some(Value::Null) => Ok([0.0, 0.0]),
         Some(Value::Array(a)) if a.len() == 2 && a.iter().all(|v| v.as_f64().is_some()) => {
@@ -138,6 +149,9 @@ mod tests {
         assert!(parse_bin(&json!({"height": 21})).is_err());
         assert!(parse_bin(&json!({"magnets": "yes"})).is_err());
         assert!(plan("lid", &json!({})).is_err());
+        assert_eq!(parse_bin(&json!({"origin_x": 50.0, "origin_y": -10})).unwrap().origin, [50.0, -10.0]);
+        assert_eq!(parse_bin(&json!({"origin": [1, 2]})).unwrap().origin, [1.0, 2.0]);
+        assert!(parse_bin(&json!({"origin_x": "a"})).is_err());
         let (name, cmds) = plan("baseplate", &json!({"width": 2, "depth": 2, "magnets": true})).unwrap();
         assert_eq!(name, "Gridfinity baseplate 2x2");
         assert!(!cmds.is_empty());
