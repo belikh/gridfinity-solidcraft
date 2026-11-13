@@ -6,6 +6,8 @@
 use serde_json::{json, Value};
 
 pub const PITCH: f64 = 42.0;
+/// Half-grid bins: four feet of 21 mm in one 42 mm baseplate pocket.
+pub const HALF_PITCH: f64 = 21.0;
 pub const UNIT_H: f64 = 7.0;
 const GAP: f64 = 0.5;
 const FOOT: (f64, f64, f64) = (0.8, 1.8, 2.15);
@@ -29,6 +31,8 @@ const PLATE_RIM: f64 = 0.05;
 pub struct BinOptions {
     pub nx: u32,
     pub ny: u32,
+    /// Cell size in mm: PITCH (full grid) or HALF_PITCH.
+    pub pitch: f64,
     pub units: u32,
     pub magnets: bool,
     pub screws: bool,
@@ -43,6 +47,10 @@ pub struct BinOptions {
 pub struct BaseplateOptions {
     pub nx: u32,
     pub ny: u32,
+    /// Pocket size in mm: PITCH (full grid) or HALF_PITCH.
+    pub pitch: f64,
+    /// Frame only: the pockets go right through (no floor, so no magnet holes).
+    pub open: bool,
     pub magnets: bool,
     pub origin: [f64; 2],
     pub name: String,
@@ -105,22 +113,41 @@ fn extrude(sketch: &str, distance: f64, op: Op, taper: Option<f64>, dir: &str) -
     cmd("solid.extrude", p)
 }
 
-fn cells(nx: u32, ny: u32, origin: [f64; 2]) -> Vec<(f64, f64)> {
+fn cells(nx: u32, ny: u32, origin: [f64; 2], pitch: f64) -> Vec<(f64, f64)> {
     let mut v = Vec::new();
     for i in 0..nx {
         for j in 0..ny {
-            v.push((origin[0] + PITCH * i as f64 + PITCH / 2.0, origin[1] + PITCH * j as f64 + PITCH / 2.0));
+            v.push((origin[0] + pitch * i as f64 + pitch / 2.0, origin[1] + pitch * j as f64 + pitch / 2.0));
         }
     }
     v
 }
 
-fn hole_circles(cells: &[(f64, f64)], dia: f64) -> Vec<Value> {
+/// Hole positions along one axis inside a foot centred at `c` (width `pitch`): the 42 mm grid's
+/// magnet spots, ±13 mm from each 42 mm cell centre counted from `origin`. A full foot gets two
+/// per axis (four holes); a half-grid foot gets the one that lines up with a baseplate magnet.
+fn hole_axis(c: f64, origin: f64, pitch: f64) -> Vec<f64> {
+    let (lo, hi) = (c - pitch / 2.0 - origin, c + pitch / 2.0 - origin);
+    let mut v = Vec::new();
+    let mut k = (lo / PITCH).floor() as i64;
+    while (k as f64) * PITCH < hi {
+        for spot in [PITCH / 2.0 - HOLE_OFFSET, PITCH / 2.0 + HOLE_OFFSET] {
+            let x = k as f64 * PITCH + spot;
+            if x > lo && x < hi {
+                v.push(origin + x);
+            }
+        }
+        k += 1;
+    }
+    v
+}
+
+fn hole_circles(cells: &[(f64, f64)], origin: [f64; 2], pitch: f64, dia: f64) -> Vec<Value> {
     let mut v = Vec::new();
     for &(x, y) in cells {
-        for sx in [-1.0, 1.0] {
-            for sy in [-1.0, 1.0] {
-                v.push(circle(x + sx * HOLE_OFFSET, y + sy * HOLE_OFFSET, dia));
+        for hx in hole_axis(x, origin[0], pitch) {
+            for hy in hole_axis(y, origin[1], pitch) {
+                v.push(circle(hx, hy, dia));
             }
         }
     }
@@ -135,22 +162,23 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     let mut out = Vec::new();
     let (a, m, c) = FOOT;
     let top = FOOT_TOP_R;
-    let s_bottom = (PITCH - GAP) - 2.0 * (a + c);
+    let pitch = o.pitch;
+    let s_bottom = (pitch - GAP) - 2.0 * (a + c);
     let r_bottom = top - (a + c);
     let (s_mid, r_mid) = (s_bottom + 2.0 * a, r_bottom + a);
     let foot_h = a + m + c;
-    let w = PITCH * o.nx as f64 - GAP;
-    let d = PITCH * o.ny as f64 - GAP;
-    let cx = o.origin[0] + PITCH * o.nx as f64 / 2.0;
-    let cy = o.origin[1] + PITCH * o.ny as f64 / 2.0;
+    let w = pitch * o.nx as f64 - GAP;
+    let d = pitch * o.ny as f64 - GAP;
+    let cx = o.origin[0] + pitch * o.nx as f64 / 2.0;
+    let cy = o.origin[1] + pitch * o.ny as f64 / 2.0;
     let height = UNIT_H * o.units as f64;
     let block_top = height + if o.lip { LIP.0 + LIP.1 + LIP.2 - LIP_FLAT } else { 0.0 };
-    let cl = cells(o.nx, o.ny, o.origin);
+    let cl = cells(o.nx, o.ny, o.origin, pitch);
 
     // Body first, then the feet downwards from it, so everything is one body.
     sketch(&mut out, foot_h, &n("Body"), vec![rrect(cx, cy, w, d, top)]);
     out.push(extrude(&n("Body"), block_top - foot_h, Op::New(b), None, ""));
-    let s_top = PITCH - GAP;
+    let s_top = pitch - GAP;
     sketch(&mut out, foot_h, &n("Feet3"), cl.iter().map(|&(x, y)| rrect(x, y, s_top, s_top, top)).collect());
     out.push(extrude(&n("Feet3"), c, Op::Join(b), Some(-45.0), "negative"));
     sketch(&mut out, a + m, &n("Feet2"), cl.iter().map(|&(x, y)| rrect(x, y, s_mid, s_mid, r_mid)).collect());
@@ -204,11 +232,11 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
 
     // Holes in the bottom of every foot.
     if o.magnets {
-        sketch(&mut out, 0.0, &n("Magnets"), hole_circles(&cl, MAGNET_D));
+        sketch(&mut out, 0.0, &n("Magnets"), hole_circles(&cl, o.origin, pitch, MAGNET_D));
         out.push(extrude(&n("Magnets"), MAGNET_DEPTH, Op::Cut(b), None, "positive"));
     }
     if o.screws {
-        sketch(&mut out, 0.0, &n("Screws"), hole_circles(&cl, SCREW_D));
+        sketch(&mut out, 0.0, &n("Screws"), hole_circles(&cl, o.origin, pitch, SCREW_D));
         out.push(extrude(&n("Screws"), SCREW_DEPTH, Op::Cut(b), None, "positive"));
     }
     out
@@ -220,27 +248,31 @@ pub fn baseplate_commands(o: &BaseplateOptions) -> Vec<Value> {
     let mut out = Vec::new();
     let (a, m, c) = PLATE_PROFILE;
     let depth = a + m + c;
-    let extra = if o.magnets { MAGNET_DEPTH + 0.6 } else { 0.35 };
-    let h = depth + extra;
-    let (w, d) = (PITCH * o.nx as f64, PITCH * o.ny as f64);
+    let rim = PLATE_RIM;
+    let pitch = o.pitch;
+    let magnets = o.magnets && !o.open;
+    // An open frame is just the pocket profile high (the pockets end at its underside).
+    let h = if o.open { depth - rim } else if magnets { depth + MAGNET_DEPTH + 0.6 } else { depth + 0.35 };
+    let (w, d) = (pitch * o.nx as f64, pitch * o.ny as f64);
     let (cx, cy) = (o.origin[0] + w / 2.0, o.origin[1] + d / 2.0);
-    let cl = cells(o.nx, o.ny, o.origin);
+    let cl = cells(o.nx, o.ny, o.origin, pitch);
     sketch(&mut out, 0.0, &n("Plate"), vec![rrect(cx, cy, w, d, PLATE_R)]);
     out.push(extrude(&n("Plate"), h, Op::New(b), None, ""));
     // The spec's pockets meet at knife edges; the kernel can't taper profiles that
     // touch, so each pocket keeps a 0.05 mm rim and its 45° starts 0.05 lower.
-    let rim = PLATE_RIM;
-    let (s_top, r_top) = (PITCH - 2.0 * rim, PLATE_R - rim);
-    let (s_mid, r_mid) = (PITCH - 2.0 * c, PLATE_R - c);
+    let (s_top, r_top) = (pitch - 2.0 * rim, PLATE_R - rim);
+    let (s_mid, r_mid) = (pitch - 2.0 * c, PLATE_R - c);
     sketch(&mut out, h, &n("Pocket1"), cl.iter().map(|&(x, y)| rrect(x, y, s_top, s_top, r_top)).collect());
     out.push(extrude(&n("Pocket1"), c - rim, Op::Cut(b), Some(-45.0), "negative"));
     sketch(&mut out, h - c + rim, &n("Pocket2"), cl.iter().map(|&(x, y)| rrect(x, y, s_mid, s_mid, r_mid)).collect());
     out.push(extrude(&n("Pocket2"), m, Op::Cut(b), None, "negative"));
     sketch(&mut out, h - c + rim - m, &n("Pocket3"), cl.iter().map(|&(x, y)| rrect(x, y, s_mid, s_mid, r_mid)).collect());
-    out.push(extrude(&n("Pocket3"), a, Op::Cut(b), Some(-45.0), "negative"));
-    if o.magnets {
+    // An open frame's last cut runs a little past the underside so it goes right through.
+    let last = if o.open { a + 0.2 } else { a };
+    out.push(extrude(&n("Pocket3"), last, Op::Cut(b), Some(-45.0), "negative"));
+    if magnets {
         let floor = h - (depth - rim);
-        sketch(&mut out, floor, &n("Magnets"), hole_circles(&cl, MAGNET_D));
+        sketch(&mut out, floor, &n("Magnets"), hole_circles(&cl, o.origin, pitch, MAGNET_D));
         out.push(extrude(&n("Magnets"), MAGNET_DEPTH, Op::Cut(b), None, "negative"));
     }
     out
@@ -251,7 +283,7 @@ mod tests {
     use super::*;
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
-        BinOptions { nx, ny, units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true,
+        BinOptions { nx, ny, pitch: PITCH, units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true,
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 
@@ -305,13 +337,39 @@ mod tests {
 
     #[test]
     fn baseplate_equals_python_reference() {
-        let o = BaseplateOptions { nx: 3, ny: 2, magnets: true, origin: [0.0, 0.0], name: "Baseplate".into() };
+        let o = BaseplateOptions { nx: 3, ny: 2, pitch: PITCH, open: false, magnets: true, origin: [0.0, 0.0], name: "Baseplate".into() };
         same_as_reference(baseplate_commands(&o), include_str!("../../gen/reference/baseplate-3x2.json"), "Baseplate ");
     }
 
     #[test]
+    fn half_grid_bin_has_one_magnet_per_foot_on_the_baseplate_spots() {
+        let mut o = bin(2, 2, 3);
+        o.pitch = HALF_PITCH;
+        let c = bin_commands(&o);
+        let holes: Vec<(f64, f64)> = c.iter().filter(|v| v["command"] == "sketch.circle.center")
+            .map(|v| (v["params"]["center"][0].as_f64().unwrap(), v["params"]["center"][1].as_f64().unwrap())).collect();
+        // a 2x2 half bin covers one 42 mm cell: the same four spots as a full 1x1 bin
+        let mut want = vec![(8.0, 8.0), (8.0, 34.0), (34.0, 8.0), (34.0, 34.0)];
+        let mut got = holes.clone();
+        got.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        want.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert_eq!(got, want);
+        // 41.5 mm outside, feet 20.5 mm at the top
+        assert!(c.iter().any(|v| v["command"] == "sketch.rectangle.rounded" && v["params"]["p1"] == json!([41.75, 41.75])));
+        assert!(c.iter().any(|v| v["command"] == "sketch.rectangle.rounded" && v["params"]["p1"] == json!([20.75, 20.75])));
+    }
+
+    #[test]
+    fn full_grid_holes_unchanged() {
+        assert_eq!(hole_axis(21.0, 0.0, PITCH), vec![8.0, 34.0]);
+        assert_eq!(hole_axis(10.5, 0.0, HALF_PITCH), vec![8.0]);
+        assert_eq!(hole_axis(31.5, 0.0, HALF_PITCH), vec![34.0]);
+        assert_eq!(hole_axis(52.5, 0.0, HALF_PITCH), vec![50.0]);
+    }
+
+    #[test]
     fn baseplate_has_one_pocket_per_cell() {
-        let c = baseplate_commands(&BaseplateOptions { nx: 3, ny: 2, magnets: false, origin: [0.0, 0.0], name: "Plate".into() });
+        let c = baseplate_commands(&BaseplateOptions { nx: 3, ny: 2, pitch: PITCH, open: false, magnets: false, origin: [0.0, 0.0], name: "Plate".into() });
         let pockets = c.iter().filter(|v| v["command"] == "sketch.rectangle.rounded" && v["params"]["radius"] == json!(3.95)).count();
         assert_eq!(pockets, 6);
     }

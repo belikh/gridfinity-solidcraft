@@ -1,8 +1,8 @@
 {
   "id": "gridfinity",
   "name": "Gridfinity",
-  "version": "0.1.2",
-  "description": "Gridfinity bins (feet, stacking lip, magnet/screw holes, dividers) and baseplates as ordinary editable features.",
+  "version": "0.2.0",
+  "description": "Gridfinity bins and baseplates (full or half grid; feet, stacking lip, magnet/screw holes, dividers; open or solid baseplates).",
   "capabilities": [
     "commands@0.1"
   ],
@@ -15,6 +15,7 @@
         "input_schema": {
           "type": "object",
           "required": [
+            "grid",
             "width",
             "depth",
             "height"
@@ -23,17 +24,17 @@
             "width": {
               "type": "integer",
               "title": "Width (cells)",
-              "description": "Cells along X, 42 mm each",
+              "description": "Cells along X (42 mm, or 21 mm on the half grid; at most 12 full or 24 half)",
               "minimum": 1,
-              "maximum": 12,
+              "maximum": 24,
               "default": 1
             },
             "depth": {
               "type": "integer",
               "title": "Depth (cells)",
-              "description": "Cells along Y, 42 mm each",
+              "description": "Cells along Y (42 mm, or 21 mm on the half grid; at most 12 full or 24 half)",
               "minimum": 1,
-              "maximum": 12,
+              "maximum": 24,
               "default": 1
             },
             "height": {
@@ -97,6 +98,16 @@
               "title": "Body name",
               "description": "Leave empty for an automatic name",
               "maxLength": 60
+            },
+            "grid": {
+              "type": "string",
+              "title": "Grid size",
+              "description": "Full: 42 mm feet. Half: 21 mm feet, four fit in one baseplate pocket",
+              "enum": [
+                "42 mm (full)",
+                "21 mm (half)"
+              ],
+              "default": "42 mm (full)"
             }
           }
         },
@@ -113,30 +124,32 @@
         "input_schema": {
           "type": "object",
           "required": [
+            "grid",
             "width",
-            "depth"
+            "depth",
+            "bottom"
           ],
           "properties": {
             "width": {
               "type": "integer",
               "title": "Width (cells)",
-              "description": "Cells along X, 42 mm each",
+              "description": "Cells along X (42 mm, or 21 mm on the half grid; at most 12 full or 24 half)",
               "minimum": 1,
-              "maximum": 12,
+              "maximum": 24,
               "default": 3
             },
             "depth": {
               "type": "integer",
               "title": "Depth (cells)",
-              "description": "Cells along Y, 42 mm each",
+              "description": "Cells along Y (42 mm, or 21 mm on the half grid; at most 12 full or 24 half)",
               "minimum": 1,
-              "maximum": 12,
+              "maximum": 24,
               "default": 3
             },
             "holes_magnet": {
               "type": "boolean",
               "title": "Magnet holes",
-              "description": "6.5 x 2.4 mm holes in every pocket",
+              "description": "6.5 x 2.4 mm holes in every pocket (needs a solid bottom)",
               "default": false
             },
             "position_x": {
@@ -158,6 +171,26 @@
               "title": "Body name",
               "description": "Leave empty for an automatic name",
               "maxLength": 60
+            },
+            "grid": {
+              "type": "string",
+              "title": "Grid size",
+              "description": "Full: 42 mm pockets. Half: 21 mm pockets",
+              "enum": [
+                "42 mm (full)",
+                "21 mm (half)"
+              ],
+              "default": "42 mm (full)"
+            },
+            "bottom": {
+              "type": "string",
+              "title": "Bottom",
+              "description": "Solid floor, or just the frame (lighter, no magnet holes)",
+              "enum": [
+                "Solid",
+                "Open (frame only)"
+              ],
+              "default": "Solid"
             }
           }
         },

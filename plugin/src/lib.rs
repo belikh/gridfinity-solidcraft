@@ -3,7 +3,7 @@
 
 pub mod geometry;
 
-use geometry::{baseplate_commands, bin_commands, BaseplateOptions, BinOptions};
+use geometry::{baseplate_commands, bin_commands, BaseplateOptions, BinOptions, HALF_PITCH, PITCH};
 use serde_json::{json, Map, Value};
 
 #[cfg(target_arch = "wasm32")]
@@ -75,15 +75,38 @@ fn get_name(p: &Map<String, Value>, default: &str) -> Result<String, String> {
     }
 }
 
+/// "42 mm (full)" / "21 mm (half)" as the dialog offers them; scripts may say "full" / "half".
+fn get_pitch(p: &Map<String, Value>) -> Result<f64, String> {
+    match p.get("grid") {
+        None | Some(Value::Null) => Ok(PITCH),
+        Some(Value::String(s)) => {
+            let s = s.to_ascii_lowercase();
+            if s.contains("half") || s.starts_with("21") {
+                Ok(HALF_PITCH)
+            } else if s.contains("full") || s.starts_with("42") {
+                Ok(PITCH)
+            } else {
+                Err("grid must be \"42 mm (full)\" or \"21 mm (half)\"".into())
+            }
+        }
+        _ => Err("grid must be \"42 mm (full)\" or \"21 mm (half)\"".into()),
+    }
+}
+
 pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
     let empty = Map::new();
     let p = params.as_object().unwrap_or(&empty);
-    let nx = get_u(p, "width", 1, 1, MAX_CELLS)?;
-    let ny = get_u(p, "depth", 1, 1, MAX_CELLS)?;
+    let pitch = get_pitch(p)?;
+    // a half-grid bin may use twice as many cells for the same overall size
+    let max_cells = if pitch == HALF_PITCH { MAX_CELLS * 2 } else { MAX_CELLS };
+    let nx = get_u(p, "width", 1, 1, max_cells)?;
+    let ny = get_u(p, "depth", 1, 1, max_cells)?;
     let units = get_u(p, "height", 3, 2, MAX_UNITS)?;
+    let half = if pitch == HALF_PITCH { " half" } else { "" };
     Ok(BinOptions {
         nx,
         ny,
+        pitch,
         units,
         magnets: get_b(p, &["holes_magnet", "magnets"], false)?,
         screws: get_b(p, &["holes_screw", "screws"], false)?,
@@ -91,21 +114,37 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         div_y: get_u(p, "dividers_y", 0, 0, MAX_DIVIDERS)?,
         lip: get_b(p, &["stacking_lip"], true)?,
         origin: get_origin(p)?,
-        name: get_name(p, &format!("Gridfinity bin {nx}x{ny}x{units}"))?,
+        name: get_name(p, &format!("Gridfinity{half} bin {nx}x{ny}x{units}"))?,
     })
 }
 
 pub fn parse_baseplate(params: &Value) -> Result<BaseplateOptions, String> {
     let empty = Map::new();
     let p = params.as_object().unwrap_or(&empty);
-    let nx = get_u(p, "width", 3, 1, MAX_CELLS)?;
-    let ny = get_u(p, "depth", 3, 1, MAX_CELLS)?;
+    let pitch = get_pitch(p)?;
+    let max_cells = if pitch == HALF_PITCH { MAX_CELLS * 2 } else { MAX_CELLS };
+    let nx = get_u(p, "width", 3, 1, max_cells)?;
+    let ny = get_u(p, "depth", 3, 1, max_cells)?;
+    let open = match p.get("bottom") {
+        None | Some(Value::Null) => false,
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("open") => true,
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("solid") => false,
+        _ => return Err("bottom must be \"Solid\" or \"Open (frame only)\"".into()),
+    };
+    let magnets = get_b(p, &["holes_magnet", "magnets"], false)?;
+    if open && magnets {
+        return Err("magnet holes need a solid bottom: choose Bottom \"Solid\" or turn Magnet holes off".into());
+    }
+    let half = if pitch == HALF_PITCH { " half" } else { "" };
+    let frame = if open { " frame" } else { "" };
     Ok(BaseplateOptions {
         nx,
         ny,
-        magnets: get_b(p, &["holes_magnet", "magnets"], false)?,
+        pitch,
+        open,
+        magnets,
         origin: get_origin(p)?,
-        name: get_name(p, &format!("Gridfinity baseplate {nx}x{ny}"))?,
+        name: get_name(p, &format!("Gridfinity{half} baseplate{frame} {nx}x{ny}"))?,
     })
 }
 
@@ -170,6 +209,14 @@ mod tests {
         assert!(o.magnets && o.screws);
         assert_eq!((o.origin, o.name.as_str()), ([5.0, 0.0], "Tray"));
         assert!(parse_baseplate(&json!({"holes_magnet": true})).unwrap().magnets);
+        let h = parse_bin(&json!({"grid": "21 mm (half)", "width": 24})).unwrap();
+        assert_eq!((h.pitch, h.nx, h.name.as_str()), (HALF_PITCH, 24, "Gridfinity half bin 24x1x3"));
+        assert_eq!(parse_bin(&json!({"grid": "42 mm (full)"})).unwrap().pitch, PITCH);
+        assert!(parse_bin(&json!({"grid": "huge"})).is_err());
+        assert!(parse_bin(&json!({"width": 13})).is_err());
+        let b = parse_baseplate(&json!({"grid": "21 mm (half)", "bottom": "Open (frame only)", "width": 4})).unwrap();
+        assert_eq!((b.pitch, b.open, b.name.as_str()), (HALF_PITCH, true, "Gridfinity half baseplate frame 4x3"));
+        assert!(parse_baseplate(&json!({"bottom": "Open (frame only)", "holes_magnet": true})).is_err());
         let (name, cmds) = plan("baseplate", &json!({"width": 2, "depth": 2, "magnets": true})).unwrap();
         assert_eq!(name, "Gridfinity baseplate 2x2");
         assert!(!cmds.is_empty());
