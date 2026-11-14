@@ -1,7 +1,7 @@
 {
   "id": "gridfinity",
   "name": "Gridfinity",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Gridfinity bins (hollow or solid for custom cutouts), baseplates and drawer baseplates split to fit your printer, on a full, half or custom grid.",
   "capabilities": [
     "commands@0.1"
@@ -61,6 +61,21 @@
               "minimum": 0,
               "maximum": 10,
               "default": 0
+            },
+            "inside_scoop": {
+              "type": "number",
+              "title": "Scoop",
+              "description": "Rounded floor along the front wall of each compartment, so small parts slide out. Radius in mm, 0 = none (hollow bins only)",
+              "minimum": 0,
+              "maximum": 40,
+              "default": 0,
+              "unit": "mm"
+            },
+            "inside_label_tab": {
+              "type": "boolean",
+              "title": "Label tab",
+              "description": "A 12 mm shelf along the back wall of each compartment, at the top, for a label (hollow bins only)",
+              "default": false
             },
             "holes_magnet": {
               "type": "boolean",
@@ -181,6 +196,42 @@
               "title": "Magnet holes",
               "description": "6.5 x 2.4 mm holes in every pocket (needs a solid bottom)",
               "default": false
+            },
+            "filler_left": {
+              "type": "number",
+              "title": "Filler left",
+              "description": "Solid strip on the left (-X) side, to fill out a drawer. 0 = none",
+              "minimum": 0,
+              "maximum": 200,
+              "default": 0,
+              "unit": "mm"
+            },
+            "filler_right": {
+              "type": "number",
+              "title": "Filler right",
+              "description": "Solid strip on the right (+X) side, to fill out a drawer. 0 = none",
+              "minimum": 0,
+              "maximum": 200,
+              "default": 0,
+              "unit": "mm"
+            },
+            "filler_front": {
+              "type": "number",
+              "title": "Filler front",
+              "description": "Solid strip on the front (-Y) side, to fill out a drawer. 0 = none",
+              "minimum": 0,
+              "maximum": 200,
+              "default": 0,
+              "unit": "mm"
+            },
+            "filler_back": {
+              "type": "number",
+              "title": "Filler back",
+              "description": "Solid strip on the back (+Y) side, to fill out a drawer. 0 = none",
+              "minimum": 0,
+              "maximum": 200,
+              "default": 0,
+              "unit": "mm"
             },
             "position_x": {
               "type": "number",

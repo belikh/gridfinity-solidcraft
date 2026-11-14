@@ -153,6 +153,8 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
             Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("hollow") => false,
             _ => return Err("inside must be \"Hollow\" or \"Solid (for custom cutouts)\"".into()),
         },
+        scoop: get_mm(p, "inside_scoop", 0.0, 0.0, 40.0)?,
+        label: get_b(p, &["inside_label_tab"], false)?,
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity{half} bin {nx}x{ny}x{units}"))?,
     })
@@ -182,10 +184,23 @@ pub fn parse_baseplate(params: &Value) -> Result<BaseplateOptions, String> {
         pitch,
         open,
         magnets,
+        filler: [
+            get_mm(p, "filler_left", 0.0, 0.0, MAX_FILLER)?,
+            get_mm(p, "filler_right", 0.0, 0.0, MAX_FILLER)?,
+            get_mm(p, "filler_front", 0.0, 0.0, MAX_FILLER)?,
+            get_mm(p, "filler_back", 0.0, 0.0, MAX_FILLER)?,
+        ],
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity{half} baseplate{frame} {nx}x{ny}"))?,
     })
 }
+
+/// Most compartments a bin with scoops or label tabs can have in one run: each divider
+/// crosses every row's scoop and tab, and 49 already take 25 s.
+const MAX_SCOOP_COMPARTMENTS: u32 = 36;
+
+/// Widest filler on one side of a baseplate (mm).
+const MAX_FILLER: f64 = 200.0;
 
 /// Largest drawer side (mm).
 const MAX_DRAWER: f64 = 1000.0;
@@ -362,6 +377,13 @@ pub fn plan(entry: &str, params: &Value) -> Result<(String, Vec<Value>), String>
     match entry {
         "bin" => {
             let o = parse_bin(params)?;
+            let compartments = (o.div_x + 1) * (o.div_y + 1);
+            if !o.solid && (o.scoop > 0.0 || o.label) && compartments > MAX_SCOOP_COMPARTMENTS {
+                return Err(format!(
+                    "{compartments} compartments with a scoop or label tab take longer than SolidCraft allows a plugin \
+                     (30 seconds): use at most {MAX_SCOOP_COMPARTMENTS}, or fewer dividers."
+                ));
+            }
             // holes make the feet slower to join: screw holes (which reach into the block) most
             let weight = 1.0 + if o.magnets { 0.6 } else { 0.0 } + if o.screws { 2.0 } else { 0.0 };
             let cells = o.nx * o.ny;
@@ -502,5 +524,43 @@ mod tests {
         let mut one = d.clone();
         one["piece"] = json!(1);
         assert!(plan("drawer", &one).is_ok());
+    }
+
+    #[test]
+    fn baseplate_filler_keeps_the_corner_at_the_origin() {
+        let b = parse_baseplate(&json!({"width": 2, "depth": 1, "filler_left": 10, "filler_back": 7.5})).unwrap();
+        assert_eq!(b.filler, [10.0, 0.0, 0.0, 7.5]);
+        assert!(parse_baseplate(&json!({"filler_right": -1})).is_err());
+        assert!(parse_baseplate(&json!({"filler_front": 201})).is_err());
+        let (_, cmds) = plan("baseplate", &json!({"width": 2, "depth": 1, "filler_left": 10, "filler_back": 7.5})).unwrap();
+        let boxes: Vec<_> = cmds.iter().filter(|c| c["command"] == "solid.box").map(|c| c["params"]["corner"].clone()).collect();
+        assert_eq!(boxes, vec![json!([0.0, 0.0, 0.0]), json!([0.0, 42.0, 0.0])]);
+        // no filler: the same commands as before
+        let (_, a) = plan("baseplate", &json!({"width": 2})).unwrap();
+        let (_, z) = plan("baseplate", &json!({"width": 2, "filler_left": 0})).unwrap();
+        assert_eq!(a, z);
+    }
+
+    #[test]
+    fn scoop_and_label_options() {
+        let o = parse_bin(&json!({"inside_scoop": 10, "inside_label_tab": true})).unwrap();
+        assert_eq!((o.scoop, o.label), (10.0, true));
+        let o = parse_bin(&json!({})).unwrap();
+        assert_eq!((o.scoop, o.label), (0.0, false));
+        assert!(parse_bin(&json!({"inside_scoop": 41})).is_err());
+        // off: the same commands as without the fields
+        let (_, a) = plan("bin", &json!({"width": 2, "dividers_x": 1})).unwrap();
+        let (_, z) = plan("bin", &json!({"width": 2, "dividers_x": 1, "inside_scoop": 0, "inside_label_tab": false})).unwrap();
+        assert_eq!(a, z);
+        // on: one YZ sketch with a profile per row and per feature, joined, then trimmed
+        let (_, c) = plan("bin", &json!({"width": 2, "dividers_y": 2, "inside_scoop": 8, "inside_label_tab": true})).unwrap();
+        assert_eq!(c.iter().filter(|v| v["command"] == "sketch.create" && v["params"]["plane"] == "YZ").count(), 1);
+        assert_eq!(c.iter().filter(|v| v["command"] == "sketch.line").count(), 6);
+        // a solid bin has no inside to put them in
+        let (_, s) = plan("bin", &json!({"inside": "Solid (for custom cutouts)", "inside_scoop": 8, "inside_label_tab": true})).unwrap();
+        assert!(!s.iter().any(|v| v["params"]["plane"] == "YZ"));
+        // too many compartments for one run
+        assert!(plan("bin", &json!({"width": 4, "depth": 4, "dividers_x": 6, "dividers_y": 6, "inside_label_tab": true})).unwrap_err().contains("49 compartments"));
+        assert!(plan("bin", &json!({"width": 4, "depth": 4, "dividers_x": 6, "dividers_y": 6})).is_ok());
     }
 }

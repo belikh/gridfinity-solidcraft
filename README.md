@@ -20,11 +20,17 @@ one undo step, editable afterwards, and they keep working without the plugin.
   into a drawer or organizer. Parts with the same custom size fit each other, but not standard
   Gridfinity. Magnet and screw holes sit 8 mm in from the cell edges, or one in the middle of cells
   under 29 mm.
+- **Scoop and label tab**: a rounded floor along the front wall of each compartment
+  (`inside_scoop`, mm), so small parts slide out, and a 12 mm shelf along the back wall at the top
+  (`inside_label_tab`) for a label. Both follow the dividers; with them a bin can have up to 36
+  compartments in one run.
 - **Solid bins** (`inside`: "Solid (for custom cutouts)"): filled to the top of the walls with the
   stacking lip around, so you can sketch on the flat top and cut holders for your own tools
   ([example](examples/solid-holder.json)).
 - **baseplate**: width × depth pockets with the Gridfinity profile, full, half or custom grid, a solid
-  bottom (optional magnet holes) or an **open frame** (no bottom).
+  bottom (optional magnet holes) or an **open frame** (no bottom). Add solid **filler** on any side
+  (`filler_left`, `filler_right`, `filler_front`, `filler_back`, in mm) to fill out a drawer
+  without the drawer settings.
 - **drawer baseplate**: enter the inside size of a drawer and the size of your printer's bed. It
   fits as many cells as the drawer takes, fills the space left over with solid filler (split evenly
   or all on one side), and cuts the plate along the grid lines into pieces that fit the printer, as
@@ -42,6 +48,14 @@ one undo step, editable afterwards, and they keep working without the plugin.
 |---|---|
 | ![Custom bin](docs/images/custom-bin.png) | ![Custom baseplate](docs/images/custom-baseplate.png) |
 
+| 2×2×6 bin with dividers, 12 mm scoops and label tabs | Cut through: scoop at the front, label tab at the back |
+|---|---|
+| ![Scoop and label tab](docs/images/bin-scoop-label.png) | ![Section](docs/images/bin-scoop-section.png) |
+
+| 4×3 baseplate with filler: 12 mm left and right, 25 mm at the back | The baseplate form with the filler fields |
+|---|---|
+| ![Baseplate with filler](docs/images/baseplate-filler.png) | ![Filler fields](docs/images/dialog-filler.png) |
+
 | A 400 × 300 mm drawer on a 256 mm printer: four pieces | Dovetails between two pieces, from above and below |
 |---|---|
 | ![Drawer baseplate](docs/images/drawer-400x300.png) | ![Tabs](docs/images/drawer-tabs.png) ![Sockets](docs/images/drawer-tabs-under.png) |
@@ -50,16 +64,16 @@ Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-opens
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
 measuring its cross-sections. Not yet printed: please report how it fits.
 
-> Status: early (0.5.0). Tested with SolidCraft 0.41.0, both through scripts/`solidcraft-cli` and in
+> Status: early (0.6.0). Tested with SolidCraft 0.41.0, both through scripts/`solidcraft-cli` and in
 > the desktop app's plugin dialog. SolidCraft's plugin runtime is itself experimental, so other
 > versions may refuse the package.
 
 ## Install
-Download `gridfinity-0.5.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
+Download `gridfinity-0.6.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
 **Plugins › Install plugin…** (or **Preferences › Plugins**) and pick the zip. From a script:
 
 ```json
-{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.5.0.zip"}}]}
+{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.6.0.zip"}}]}
 ```
 
 Add `"replace": true` to update an installed version. You can also unpack the zip into
@@ -106,8 +120,8 @@ run an entry with that hash ([examples/](examples/)).
 
 | Entry | Parameters (default) |
 |---|---|
-| `bin` | `grid` "42 mm (full)" / "21 mm (half)" / "Custom (sizes below)", `custom_size_x`, `custom_size_y` 15–100 mm (42, Custom only), `width` up to 504 mm and 24 cells (1), `depth` (1), `height` 2–20 units (3), `inside` "Hollow" / "Solid (for custom cutouts)", `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
-| `baseplate` | `grid`, `custom_size_x`, `custom_size_y`, `width` (3), `depth` (3), `bottom` "Solid" / "Open (frame only)", `holes_magnet` (false, solid only), `position_x`, `position_y` mm (0), `title` |
+| `bin` | `grid` "42 mm (full)" / "21 mm (half)" / "Custom (sizes below)", `custom_size_x`, `custom_size_y` 15–100 mm (42, Custom only), `width` up to 504 mm and 24 cells (1), `depth` (1), `height` 2–20 units (3), `inside` "Hollow" / "Solid (for custom cutouts)", `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `inside_scoop` 0–40 mm (0), `inside_label_tab` (false), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
+| `baseplate` | `grid`, `custom_size_x`, `custom_size_y`, `width` (3), `depth` (3), `bottom` "Solid" / "Open (frame only)", `holes_magnet` (false, solid only), `filler_left`, `filler_right`, `filler_front`, `filler_back` 0–200 mm (0), `position_x`, `position_y` mm (0, the corner of the plate with its filler), `title` |
 | `drawer` | `drawer_width`, `drawer_depth` 15–1000 mm (300), `printer_x`, `printer_y` 50–1000 mm (256), `grid`, `custom_size_x`, `custom_size_y`, `bottom`, `holes_magnet`, `filler_x` "Even (both sides)" / "Left" / "Right", `filler_y` "Even (both sides)" / "Front" / "Back", `piece` (0: all), `position_x`, `position_y` mm (0), `title` |
 
 Scripts may also say `"full"` / `"half"` / `"custom"` / `"open"` and use the older names `magnets`, `screws`, `name` and `origin: [x, y]`.

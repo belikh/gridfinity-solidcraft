@@ -20,6 +20,10 @@ const LIP: (f64, f64, f64) = (0.7, 1.8, 1.9);
 const LIP_FLAT: f64 = 0.3;
 const LIP_SUPPORT: f64 = 1.2;
 const DIVIDER: f64 = 1.2;
+/// How far a label tab reaches out from the back wall (mm); its underside slopes at 45°.
+const LABEL_W: f64 = 12.0;
+/// Straight steps in a scoop's quarter circle.
+const SCOOP_STEPS: u32 = 8;
 const HOLE_OFFSET: f64 = 13.0;
 pub(crate) const MAGNET_D: f64 = 6.5;
 pub(crate) const MAGNET_DEPTH: f64 = 2.4;
@@ -43,6 +47,10 @@ pub struct BinOptions {
     pub lip: bool,
     /// Filled up to the top of the walls (no cavity, no dividers), for cutting custom holders.
     pub solid: bool,
+    /// Rounded floor along the front wall of each compartment, to scoop items out (mm, 0: none).
+    pub scoop: f64,
+    /// A shelf along the back wall of each compartment, at the top, to put a label on.
+    pub label: bool,
     pub origin: [f64; 2],
     pub name: String,
 }
@@ -56,6 +64,8 @@ pub struct BaseplateOptions {
     /// Frame only: the pockets go right through (no floor, so no magnet holes).
     pub open: bool,
     pub magnets: bool,
+    /// Solid filler beside the pockets: left, right, front, back (mm).
+    pub filler: [f64; 4],
     pub origin: [f64; 2],
     pub name: String,
 }
@@ -261,9 +271,63 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
         sketch(&mut out, z, &n("Cavity"), vec![rrect(cx, cy, w - 2.0 * WALL, d - 2.0 * WALL, top - WALL)]);
         out.push(extrude(&n("Cavity"), z - FLOOR_Z, Op::Cut(b), None, "negative"));
 
-        // Dividers from the floor to just under the lip support.
         let (iw, id) = (w - 2.0 * WALL, d - 2.0 * WALL);
         let (x0, y0) = (cx - iw / 2.0, cy - id / 2.0);
+        // Scoops and label tabs: one profile per row of compartments, drawn across Y on a YZ
+        // sketch at the cavity's left side and extruded right across the whole inside.
+        let rows = o.div_y + 1;
+        let row = |k: u32| {
+            let lo = y0 + id * k as f64 / rows as f64 + if k > 0 { DIVIDER / 2.0 } else { 0.0 };
+            let hi = y0 + id * (k + 1) as f64 / rows as f64 - if k + 1 < rows { DIVIDER / 2.0 } else { 0.0 };
+            (lo, hi)
+        };
+        let depth = row(0).1 - row(0).0;
+        let e = 0.01; // reach a little into the wall and floor, so the shapes join solidly
+        let label = if o.label { LABEL_W.min(depth / 2.0).min((z - FLOOR_Z) / 2.0) } else { 0.0 };
+        let mut profiles = Vec::new();
+        let r = o.scoop.min(depth - label - 1.0).min(z - FLOOR_Z);
+        if r > 0.5 {
+            for k in 0..rows {
+                let yf = row(k).0;
+                // a concave quarter circle, centre (yf + r, FLOOR_Z + r), from the floor up the
+                // wall, in straight steps (a true arc, tangent to floor and wall, makes the
+                // kernel's boolean fail), closed by lines just inside the wall and floor
+                let mut pts = vec![[yf - e, FLOOR_Z - e]];
+                pts.extend((0..=SCOOP_STEPS).map(|i| {
+                    let t = std::f64::consts::FRAC_PI_2 * (3.0 - i as f64 / SCOOP_STEPS as f64);
+                    [yf + r + r * t.cos(), FLOOR_Z + r + r * t.sin()]
+                }));
+                pts.push([yf - e, FLOOR_Z + r]);
+                let pts: Vec<[f64; 2]> = pts.iter().map(|&[u, v]| [r4(u), r4(v)]).collect();
+                profiles.push(cmd("sketch.line", json!({"points": pts, "closed": true})));
+            }
+        }
+        if label > 0.0 {
+            for k in 0..rows {
+                let yb = row(k).1;
+                let pts: Vec<[f64; 2]> = [[yb + e, z], [yb - label, z], [yb + e, z - label - e]].iter().map(|&[u, v]| [r4(u), r4(v)]).collect();
+                profiles.push(cmd("sketch.line", json!({"points": pts, "closed": true})));
+            }
+        }
+        if !profiles.is_empty() {
+            out.push(cmd("sketch.create", json!({"plane": "YZ", "offset": r4(x0 - e), "name": n("Scoops and labels")})));
+            out.extend(profiles);
+            out.push(cmd("sketch.finish", json!({})));
+            out.push(extrude(&n("Scoops and labels"), iw + 2.0 * e, Op::Join(b), None, "positive"));
+            // their ends poke out a little through the rounded corners of the wall: trim the bin
+            // back to its outline there
+            let trim = n("Scoops trim");
+            sketch(&mut out, FLOOR_Z - 2.0 * e, &trim, vec![
+                rrect(cx, cy, w, d, top),
+                cmd("sketch.rectangle.two_point", json!({"p0": [r4(cx - w / 2.0 - 5.0), r4(cy - d / 2.0 - 5.0)], "p1": [r4(cx + w / 2.0 + 5.0), r4(cy + d / 2.0 + 5.0)]})),
+            ]);
+            let mut cut = extrude(&trim, z - FLOOR_Z + 4.0 * e, Op::Cut(b), None, "positive");
+            cut["params"]["profiles"] = json!([{"point": [r4(cx - w / 2.0 - 2.5), r4(cy)]}]);
+            out.push(cut);
+        }
+
+        // Dividers from the floor to just under the lip support, after the scoops: they cut
+        // across them.
         for k in 1..=o.div_x {
             let x = x0 + iw * k as f64 / (o.div_x + 1) as f64 - DIVIDER / 2.0;
             out.push(cmd("solid.box", json!({"corner": [r4(x), r4(y0), FLOOR_Z], "length": DIVIDER, "width": r4(id),
@@ -274,6 +338,7 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
             out.push(cmd("solid.box", json!({"corner": [r4(x0), r4(y), FLOOR_Z], "length": r4(iw), "width": DIVIDER,
                 "height": r4(z - FLOOR_Z), "operation": "join", "targets": [b]})));
         }
+
     }
 
     // Screw holes reach above the feet into the block: that part is cut now, while it is simple.
@@ -339,14 +404,16 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
 
 pub fn baseplate_commands(o: &BaseplateOptions) -> Vec<Value> {
     let magnets = o.magnets && !o.open;
+    // the plate's corner (filler included) stays at the origin
+    let corner = [o.origin[0] + o.filler[0], o.origin[1] + o.filler[2]];
     let piece = crate::plate::Piece {
         name: o.name.clone(),
-        cells: Block { corner: o.origin, nx: o.nx, ny: o.ny, pitch: o.pitch },
+        cells: Block { corner, nx: o.nx, ny: o.ny, pitch: o.pitch },
         h: crate::plate::plate_height(o.open, magnets),
         open: o.open,
         magnets,
-        grid_origin: o.origin,
-        filler: [0.0; 4],
+        grid_origin: corner,
+        filler: o.filler,
         round: [true; 4],
         tabs: [false; 2],
         sockets: [false; 2],
@@ -410,7 +477,7 @@ mod tests {
     use super::*;
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
-        BinOptions { nx, ny, pitch: [PITCH; 2], units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false,
+        BinOptions { nx, ny, pitch: [PITCH; 2], units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, scoop: 0.0, label: false,
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 
@@ -532,7 +599,7 @@ mod tests {
         assert_eq!(circles(&c), vec![(8.0, 12.5), (32.0, 12.5)]);
         // outside 39.5 x 24.5, feet the same at the top
         assert!(c.iter().any(|v| v["command"] == "sketch.rectangle.rounded" && v["params"]["p1"] == json!([39.75, 24.75])));
-        let p = BaseplateOptions { nx: 1, ny: 1, pitch: [40.0, 25.0], open: false, magnets: true, origin: [0.0, 0.0], name: "Plate".into() };
+        let p = BaseplateOptions { nx: 1, ny: 1, pitch: [40.0, 25.0], open: false, magnets: true, filler: [0.0; 4], origin: [0.0, 0.0], name: "Plate".into() };
         let pc = baseplate_commands(&p);
         let magnets = |c: &[Value]| -> Vec<Value> { c.iter().filter(|v| v["params"]["diameter"] == json!(MAGNET_D)).cloned().collect() };
         assert_eq!(circles(&magnets(&pc)), circles(&c));
@@ -544,7 +611,7 @@ mod tests {
 
     #[test]
     fn baseplate_is_one_cell_repeated_with_rounded_corners() {
-        let c = baseplate_commands(&BaseplateOptions { nx: 3, ny: 2, pitch: [PITCH; 2], open: false, magnets: false, origin: [0.0, 0.0], name: "Plate".into() });
+        let c = baseplate_commands(&BaseplateOptions { nx: 3, ny: 2, pitch: [PITCH; 2], open: false, magnets: false, filler: [0.0; 4], origin: [0.0, 0.0], name: "Plate".into() });
         let pockets = c.iter().filter(|v| v["command"] == "sketch.rectangle.rounded" && v["params"]["radius"] == json!(3.95)).count();
         assert_eq!(pockets, 1);
         // a row of 3, then 2 rows
@@ -567,7 +634,7 @@ mod tests {
         o.div_x = 10;
         o.div_y = 10;
         assert!(bin_commands(&o).len() < 100);
-        let p = BaseplateOptions { nx: 24, ny: 24, pitch: [HALF_PITCH; 2], open: false, magnets: true, origin: [0.0, 0.0], name: "P".into() };
+        let p = BaseplateOptions { nx: 24, ny: 24, pitch: [HALF_PITCH; 2], open: false, magnets: true, filler: [0.0; 4], origin: [0.0, 0.0], name: "P".into() };
         assert!(baseplate_commands(&p).len() < 100);
     }
 }
