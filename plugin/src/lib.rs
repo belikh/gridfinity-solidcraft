@@ -6,7 +6,7 @@ pub mod geometry;
 pub mod plate;
 
 use drawer::{drawer_commands, DrawerOptions, Filler};
-use geometry::{baseplate_commands, bin_commands, BaseplateOptions, BinOptions, HALF_PITCH, PITCH};
+use geometry::{baseplate_commands, bin_commands, bin_inside_top, BaseplateOptions, BinOptions, FLOOR_Z, HALF_PITCH, PITCH, UNIT_H};
 use serde_json::{Map, Value};
 use serde_json::json;
 
@@ -137,6 +137,24 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
     let ny = get_u(p, "depth", 1, 1, max_cells(pitch[1]))?;
     let units = get_u(p, "height", 3, 2, MAX_UNITS)?;
     let half = grid_label(pitch);
+    let lip = get_b(p, &["stacking_lip"], true)?;
+    let solid = match p.get("inside") {
+        None | Some(Value::Null) => false,
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("solid") => true,
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("hollow") => false,
+        _ => return Err("inside must be \"Hollow\" or \"Solid (for custom cutouts)\"".into()),
+    };
+    // only a solid bin has a fill; 0 fills it to the top of the walls
+    let mut fill = get_mm(p, "inside_fill_height", 0.0, 0.0, UNIT_H * MAX_UNITS as f64)?;
+    if !solid {
+        fill = 0.0;
+    }
+    // leave at least 1 mm of wall above the fill
+    let max_fill = ((bin_inside_top(units, lip) - 1.0) * 100.0).round() / 100.0;
+    if fill > 0.0 && !(FLOOR_Z..=max_fill).contains(&fill) {
+        return Err(format!("Fill height must be from {FLOOR_Z} to {max_fill} mm for a {units}-unit bin{}, or 0 to fill it to the top.",
+            if lip { "" } else { " without stacking lip" }));
+    }
     Ok(BinOptions {
         nx,
         ny,
@@ -146,13 +164,9 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         screws: get_b(p, &["holes_screw", "screws"], false)?,
         div_x: get_u(p, "dividers_x", 0, 0, MAX_DIVIDERS)?,
         div_y: get_u(p, "dividers_y", 0, 0, MAX_DIVIDERS)?,
-        lip: get_b(p, &["stacking_lip"], true)?,
-        solid: match p.get("inside") {
-            None | Some(Value::Null) => false,
-            Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("solid") => true,
-            Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("hollow") => false,
-            _ => return Err("inside must be \"Hollow\" or \"Solid (for custom cutouts)\"".into()),
-        },
+        lip,
+        solid,
+        fill,
         scoop: get_mm(p, "inside_scoop", 0.0, 0.0, 40.0)?,
         label: get_b(p, &["inside_label_tab"], false)?,
         origin: get_origin(p)?,
@@ -562,5 +576,28 @@ mod tests {
         // too many compartments for one run
         assert!(plan("bin", &json!({"width": 4, "depth": 4, "dividers_x": 6, "dividers_y": 6, "inside_label_tab": true})).unwrap_err().contains("49 compartments"));
         assert!(plan("bin", &json!({"width": 4, "depth": 4, "dividers_x": 6, "dividers_y": 6})).is_ok());
+    }
+
+    #[test]
+    fn fill_height() {
+        let solid = "Solid (for custom cutouts)";
+        // off, or on a hollow bin: the same commands as without the field
+        let (_, a) = plan("bin", &json!({"inside": solid, "height": 6})).unwrap();
+        let (_, z) = plan("bin", &json!({"inside": solid, "height": 6, "inside_fill_height": 0})).unwrap();
+        assert_eq!(a, z);
+        let (_, h) = plan("bin", &json!({"height": 6})).unwrap();
+        let (_, hf) = plan("bin", &json!({"height": 6, "inside_fill_height": 20})).unwrap();
+        assert_eq!(h, hf);
+        // on: a cavity cut down to the fill, under the lip support
+        let (_, c) = plan("bin", &json!({"inside": solid, "height": 6, "inside_fill_height": 20})).unwrap();
+        let cav = c.iter().find(|v| v["command"] == "solid.extrude" && v["params"]["sketch"].as_str().unwrap().ends_with("Cavity")).unwrap();
+        let top = bin_inside_top(6, true);
+        assert!((cav["params"]["distance"].as_f64().unwrap() - (top - 20.0)).abs() < 1e-6);
+        assert!(c.iter().any(|v| v["params"]["sketch"].as_str().map_or(false, |s| s.ends_with("Support1"))));
+        assert!(!c.iter().any(|v| v["command"] == "solid.box"));
+        // out of range
+        assert!(plan("bin", &json!({"inside": solid, "height": 6, "inside_fill_height": 5})).unwrap_err().contains("Fill height"));
+        assert!(plan("bin", &json!({"inside": solid, "height": 6, "inside_fill_height": top})).is_err());
+        assert!(plan("bin", &json!({"inside": solid, "height": 6, "inside_fill_height": top - 1.0})).is_ok());
     }
 }

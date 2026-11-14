@@ -14,7 +14,7 @@ pub const UNIT_H: f64 = 7.0;
 const GAP: f64 = 0.5;
 const FOOT: (f64, f64, f64) = (0.8, 1.8, 2.15);
 const FOOT_TOP_R: f64 = 3.75;
-const FLOOR_Z: f64 = 6.0;
+pub(crate) const FLOOR_Z: f64 = 6.0;
 const WALL: f64 = 0.95;
 const LIP: (f64, f64, f64) = (0.7, 1.8, 1.9);
 const LIP_FLAT: f64 = 0.3;
@@ -47,12 +47,22 @@ pub struct BinOptions {
     pub lip: bool,
     /// Filled up to the top of the walls (no cavity, no dividers), for cutting custom holders.
     pub solid: bool,
+    /// Solid bins: top of the fill, mm from the bottom of the bin (0: up to the top of the walls).
+    /// Above it the bin is hollow, so another bin stacks on top clear of what sits in the cutout.
+    pub fill: f64,
     /// Rounded floor along the front wall of each compartment, to scoop items out (mm, 0: none).
     pub scoop: f64,
     /// A shelf along the back wall of each compartment, at the top, to put a label on.
     pub label: bool,
     pub origin: [f64; 2],
     pub name: String,
+}
+
+/// Height of the inside of a bin above its floor: the highest a solid bin's fill can stop below
+/// the walls (mm from the bottom of the bin).
+pub fn bin_inside_top(units: u32, lip: bool) -> f64 {
+    let height = UNIT_H * units as f64;
+    if lip { height - LIP_SUPPORT - (LIP.0 + LIP.2 - WALL) } else { height }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -240,6 +250,8 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     let tip = LIP.0 + LIP.2;
     let mut z;
     let hollow = !o.solid;
+    // a solid bin filled lower than the walls gets the same walls and lip support as a hollow one
+    let pocket = hollow || o.fill > 0.0;
     if o.lip {
         z = block_top;
         let d1 = LIP.2 - LIP_FLAT;
@@ -255,7 +267,7 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
         out.push(extrude(&n("Lip3"), LIP.0, Op::Cut(b), Some(-45.0), "negative"));
         z -= LIP.0;
         // Filled: the top is flat at the wall height, inside the lip.
-        if hollow {
+        if pocket {
             sketch(&mut out, z, &n("Support1"), vec![rrect(cx, cy, w - 2.0 * tip, d - 2.0 * tip, top - tip)]);
             out.push(extrude(&n("Support1"), LIP_SUPPORT, Op::Cut(b), None, "negative"));
             z -= LIP_SUPPORT;
@@ -267,9 +279,12 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     } else {
         z = height;
     }
-    if hollow {
+    if pocket {
+        let floor = if hollow { FLOOR_Z } else { o.fill };
         sketch(&mut out, z, &n("Cavity"), vec![rrect(cx, cy, w - 2.0 * WALL, d - 2.0 * WALL, top - WALL)]);
-        out.push(extrude(&n("Cavity"), z - FLOOR_Z, Op::Cut(b), None, "negative"));
+        out.push(extrude(&n("Cavity"), z - floor, Op::Cut(b), None, "negative"));
+    }
+    if hollow {
 
         let (iw, id) = (w - 2.0 * WALL, d - 2.0 * WALL);
         let (x0, y0) = (cx - iw / 2.0, cy - id / 2.0);
@@ -477,7 +492,7 @@ mod tests {
     use super::*;
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
-        BinOptions { nx, ny, pitch: [PITCH; 2], units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, scoop: 0.0, label: false,
+        BinOptions { nx, ny, pitch: [PITCH; 2], units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, fill: 0.0, scoop: 0.0, label: false,
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 

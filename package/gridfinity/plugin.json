@@ -1,7 +1,7 @@
 {
   "id": "gridfinity",
   "name": "Gridfinity",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Gridfinity bins (hollow or solid for custom cutouts), baseplates and drawer baseplates split to fit your printer, on a full, half or custom grid.",
   "capabilities": [
     "commands@0.1"
@@ -68,6 +68,15 @@
               "description": "Rounded floor along the front wall of each compartment, so small parts slide out. Radius in mm, 0 = none (hollow bins only)",
               "minimum": 0,
               "maximum": 40,
+              "default": 0,
+              "unit": "mm"
+            },
+            "inside_fill_height": {
+              "type": "number",
+              "title": "Fill height (solid)",
+              "description": "Solid bins: where the fill stops, mm from the bottom of the bin. Above it the bin is hollow, so a bin stacked on top clears what sits in your cutout. 0 = filled to the top of the walls",
+              "minimum": 0,
+              "maximum": 140,
               "default": 0,
               "unit": "mm"
             },
