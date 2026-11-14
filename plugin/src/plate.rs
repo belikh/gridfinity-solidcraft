@@ -20,8 +20,11 @@ pub const TAB_DEPTH: f64 = 1.8;
 /// Half-width of a tab at the seam and at its far end: the far end is wider, so it locks.
 pub const TAB_NECK: f64 = 3.0;
 pub const TAB_HEAD: f64 = 4.5;
-/// Gap left around a tab in the socket it fits into (mm, each side, and above it).
-pub const CLEARANCE: f64 = 0.15;
+/// Gap left around a tab in the socket it fits into (mm, each side and at its end). Small, so
+/// the pieces press together: 0.15 mm printed loose on an Elegoo CC2 in PETG.
+pub const CLEARANCE: f64 = 0.05;
+/// Gap above a tab, so the piece with the sockets still sits flat.
+pub const CLEARANCE_TOP: f64 = 0.15;
 
 /// Height of a baseplate: an open frame is just the pocket profile high (the pockets end at its
 /// underside); a solid one keeps a floor, thicker with magnet holes.
@@ -112,7 +115,7 @@ pub fn piece_commands(out: &mut Vec<Value>, p: &Piece) {
     let row_c = y0 + py / 2.0;
     if p.sockets[0] {
         sketch(out, 0.0, &n("Sockets X"), vec![polygon(&dovetail(0, x0 - fl, row_c, CLEARANCE))]);
-        out.push(extrude(&n("Sockets X"), tab_h + CLEARANCE, Op::Cut(b), None, ""));
+        out.push(extrude(&n("Sockets X"), tab_h + CLEARANCE_TOP, Op::Cut(b), None, ""));
     }
     if p.tabs[0] {
         sketch(out, 0.0, &n("Tabs X"), vec![polygon(&dovetail(0, x1 + fr, row_c, 0.0))]);
@@ -139,7 +142,7 @@ pub fn piece_commands(out: &mut Vec<Value>, p: &Piece) {
         let mut v = vec![polygon(&dovetail(1, front, col_c, CLEARANCE))];
         v.extend(pattern(nx, px, 1, 0.0));
         sketch(out, 0.0, &n("Sockets Y"), v);
-        out.push(extrude(&n("Sockets Y"), tab_h + CLEARANCE, Op::Cut(b), None, ""));
+        out.push(extrude(&n("Sockets Y"), tab_h + CLEARANCE_TOP, Op::Cut(b), None, ""));
     }
     // back row (the same body when there is one row)
     if fb > 1e-6 {

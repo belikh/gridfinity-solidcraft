@@ -28,7 +28,7 @@ one undo step, editable afterwards, and they keep working without the plugin.
 - **drawer baseplate**: enter the inside size of a drawer and the size of your printer's bed. It
   fits as many cells as the drawer takes, fills the space left over with solid filler (split evenly
   or all on one side), and cuts the plate along the grid lines into pieces that fit the printer, as
-  evenly as it can. The pieces lock together with dovetail tabs (1.8 mm, 0.15 mm clearance), which
+  evenly as it can. The pieces lock together with dovetail tabs (1.8 mm, 0.05 mm clearance), which
   sit low in the wall between pockets so they don't show; the piece with the sockets goes on from
   above. Big drawers are built one piece at a time (`piece`), see *Limits* below.
 
