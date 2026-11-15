@@ -24,6 +24,12 @@ one undo step, editable afterwards, and they keep working without the plugin.
   (`inside_scoop`, mm), so small parts slide out, and a 12 mm shelf along the back wall at the top
   (`inside_label_tab`) for a label. Both follow the dividers; with them a bin can have up to 36
   compartments in one run.
+- **Label text** (`inside_label_text`): text on the label tabs, one label per compartment
+  separated by `;` (back row first, left to right; `M3x6; M3x8;; Washers` leaves the third one
+  empty). It stands up from the tab as a body of its own (`inside_label_text_height`, 0.4 mm by
+  default, so one or two layers), so you can print it in another filament: in the slicer, give the
+  label body its own filament. The size (`inside_label_text_size`, capital height) is picked to fit
+  the tab unless you set it. Text adds a label tab by itself.
 - **Solid bins** (`inside`: "Solid (for custom cutouts)"): filled to the top of the walls with the
   stacking lip around, so you can sketch on the flat top and cut holders for your own tools
   ([example](examples/solid-holder.json)). Set a **fill height** (`inside_fill_height`, mm from the
@@ -54,6 +60,10 @@ one undo step, editable afterwards, and they keep working without the plugin.
 |---|---|
 | ![Scoop and label tab](docs/images/bin-scoop-label.png) | ![Section](docs/images/bin-scoop-section.png) |
 
+| 3×2×4 bin with label text (the text is its own body, shown red) | The bin form with the label text fields |
+|---|---|
+| ![Label text](docs/images/bin-label-text.png) | ![Label text fields](docs/images/dialog-label-text.png) |
+
 | Solid 3×2×6 bin filled to 20 mm, with cutouts | Cut through: solid fill below, open above |
 |---|---|
 | ![Fill height](docs/images/bin-fill-height.png) | ![Section](docs/images/bin-fill-height-section.png) |
@@ -70,16 +80,16 @@ Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-opens
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
 measuring its cross-sections. Not yet printed: please report how it fits.
 
-> Status: early (0.7.0). Tested with SolidCraft 0.41.0, both through scripts/`solidcraft-cli` and in
+> Status: early (0.8.0). Tested with SolidCraft 0.41.0 and 0.42.0, both through scripts/`solidcraft-cli` and in
 > the desktop app's plugin dialog. SolidCraft's plugin runtime is itself experimental, so other
 > versions may refuse the package.
 
 ## Install
-Download `gridfinity-0.7.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
+Download `gridfinity-0.8.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
 **Plugins › Install plugin…** (or **Preferences › Plugins**) and pick the zip. From a script:
 
 ```json
-{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.7.0.zip"}}]}
+{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.8.0.zip"}}]}
 ```
 
 Add `"replace": true` to update an installed version. You can also unpack the zip into
@@ -110,6 +120,11 @@ that the plugin says so before it starts. For a bigger baseplate use the drawer 
 build it a piece at a time: set **Piece** to 1, 2, … (numbered along X, then Y) and run once for
 each. Pieces built separately land where they would have with the others.
 
+Label text is slow: the desktop app checks every letter, about half a second each, and each
+compartment with a label tab costs about as much. Letters and digits (spaces are free) plus
+compartments may add up to 50 in one run, so a bin with 6 compartments takes 44 letters of label
+text, and one with 36 compartments 14 (about 20 seconds either way).
+
 ## Run from a script
 SolidCraft runs plugin code only when you ask: inspect the package to get its approval hash, then
 run an entry with that hash ([examples/](examples/)).
@@ -126,7 +141,7 @@ run an entry with that hash ([examples/](examples/)).
 
 | Entry | Parameters (default) |
 |---|---|
-| `bin` | `grid` "42 mm (full)" / "21 mm (half)" / "Custom (sizes below)", `custom_size_x`, `custom_size_y` 15–100 mm (42, Custom only), `width` up to 504 mm and 24 cells (1), `depth` (1), `height` 2–20 units (3), `inside` "Hollow" / "Solid (for custom cutouts)", `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `inside_scoop` 0–40 mm (0), `inside_label_tab` (false), `inside_fill_height` mm (0: to the top; solid bins, from 6 mm to 1 mm under the inside top), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
+| `bin` | `grid` "42 mm (full)" / "21 mm (half)" / "Custom (sizes below)", `custom_size_x`, `custom_size_y` 15–100 mm (42, Custom only), `width` up to 504 mm and 24 cells (1), `depth` (1), `height` 2–20 units (3), `inside` "Hollow" / "Solid (for custom cutouts)", `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `inside_scoop` 0–40 mm (0), `inside_label_tab` (false), `inside_label_text` (labels separated by `;`), `inside_label_text_size` 0–20 mm (0: fit), `inside_label_text_height` 0.1–3 mm (0.4), `inside_fill_height` mm (0: to the top; solid bins, from 6 mm to 1 mm under the inside top), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
 | `baseplate` | `grid`, `custom_size_x`, `custom_size_y`, `width` (3), `depth` (3), `bottom` "Solid" / "Open (frame only)", `holes_magnet` (false, solid only), `filler_left`, `filler_right`, `filler_front`, `filler_back` 0–200 mm (0), `position_x`, `position_y` mm (0, the corner of the plate with its filler), `title` |
 | `drawer` | `drawer_width`, `drawer_depth` 15–1000 mm (300), `printer_x`, `printer_y` 50–1000 mm (256), `grid`, `custom_size_x`, `custom_size_y`, `bottom`, `holes_magnet`, `filler_x` "Even (both sides)" / "Left" / "Right", `filler_y` "Even (both sides)" / "Front" / "Back", `piece` (0: all), `position_x`, `position_y` mm (0), `title` |
 

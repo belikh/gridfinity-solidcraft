@@ -22,6 +22,11 @@ const LIP_SUPPORT: f64 = 1.2;
 const DIVIDER: f64 = 1.2;
 /// How far a label tab reaches out from the back wall (mm); its underside slopes at 45°.
 const LABEL_W: f64 = 12.0;
+/// Largest automatic label text (capital height, mm).
+pub(crate) const LABEL_TEXT_MAX: f64 = 6.0;
+/// Room kept clear beside and in front of/behind label text (mm).
+const LABEL_MARGIN: f64 = 1.0;
+const LABEL_MARGIN_Y: f64 = 0.5;
 /// Straight steps in a scoop's quarter circle.
 const SCOOP_STEPS: u32 = 8;
 const HOLE_OFFSET: f64 = 13.0;
@@ -54,6 +59,13 @@ pub struct BinOptions {
     pub scoop: f64,
     /// A shelf along the back wall of each compartment, at the top, to put a label on.
     pub label: bool,
+    /// Text on the label tabs, one per compartment: back row first, left to right ("" for none).
+    pub label_text: Vec<String>,
+    /// Capital height of the label text (mm, 0: as big as fits).
+    pub text_size: f64,
+    /// How far the label text stands up from the tab (mm). It is a body of its own, so it can
+    /// be printed in another filament.
+    pub text_height: f64,
     pub origin: [f64; 2],
     pub name: String,
 }
@@ -82,6 +94,58 @@ pub struct BaseplateOptions {
 
 pub(crate) fn r4(v: f64) -> f64 {
     (v * 10_000.0).round() / 10_000.0
+}
+
+/// About how wide a text is in the built-in font (Liberation Sans), `h` its capital height (mm).
+pub(crate) fn text_width(s: &str, h: f64) -> f64 {
+    s.chars().map(|c| h * if c.is_whitespace() { 0.35 } else if c.is_uppercase() || c.is_ascii_digit() { 0.85 }
+        else if c.is_lowercase() { 0.68 } else { 0.55 }).sum()
+}
+
+/// Where label text goes: for each compartment, back row first and left to right, the middle
+/// of the part of its tab that can be seen from above (x, y) and that part's width and depth.
+pub fn label_areas(o: &BinOptions) -> Vec<(f64, f64, f64, f64)> {
+    let w = o.pitch[0] * o.nx as f64 - GAP;
+    let d = o.pitch[1] * o.ny as f64 - GAP;
+    let (iw, id) = (w - 2.0 * WALL, d - 2.0 * WALL);
+    let (x0, y0) = (o.origin[0] + GAP / 2.0 + WALL, o.origin[1] + GAP / 2.0 + WALL);
+    let rows = o.div_y + 1;
+    let cols = o.div_x + 1;
+    let z = bin_inside_top(o.units, o.lip);
+    let depth = id / rows as f64 - if rows > 1 { DIVIDER / 2.0 } else { 0.0 };
+    let label = LABEL_W.min(depth / 2.0).min((z - FLOOR_Z) / 2.0);
+    let mut v = Vec::new();
+    for k in (0..rows).rev() {
+        let hi = y0 + id * (k + 1) as f64 / rows as f64 - if k + 1 < rows { DIVIDER / 2.0 } else { 0.0 };
+        // the lip hangs over the back of the last row's tab
+        let hidden = if k + 1 == rows && o.lip { LIP.0 + LIP.2 - WALL } else { 0.0 };
+        let (front, back) = (hi - label + LABEL_MARGIN_Y, hi - hidden - LABEL_MARGIN_Y);
+        for j in 0..cols {
+            let lo_x = x0 + iw * j as f64 / cols as f64 + if j > 0 { DIVIDER / 2.0 } else { 0.0 };
+            let hi_x = x0 + iw * (j + 1) as f64 / cols as f64 - if j + 1 < cols { DIVIDER / 2.0 } else { 0.0 };
+            v.push(((lo_x + hi_x) / 2.0, (front + back) / 2.0, hi_x - lo_x - 2.0 * LABEL_MARGIN, back - front));
+        }
+    }
+    v
+}
+
+/// How deep a text is, in capital heights: more with descenders (g, p, y) under the line.
+pub(crate) fn text_depth(s: &str) -> f64 {
+    if descends(s) { 1.25 } else { 1.0 }
+}
+
+fn descends(s: &str) -> bool {
+    s.chars().any(|c| "gjpqy,;()[]{}|".contains(c))
+}
+
+/// Capital height for one label: the size asked for, or as big as fits.
+pub fn label_size(o: &BinOptions, text: &str, area_w: f64, area_d: f64) -> f64 {
+    if o.text_size > 0.0 {
+        return o.text_size;
+    }
+    let by_depth = area_d / text_depth(text);
+    let by_width = area_w / text_width(text, 1.0).max(0.01);
+    (by_depth.min(by_width).min(LABEL_TEXT_MAX) * 10.0).floor() / 10.0
 }
 
 pub(crate) fn cmd(command: &str, params: Value) -> Value {
@@ -414,6 +478,27 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
         }
     }
     out.push(cmd("solid.combine", json!({"target": b, "tools": feet, "operation": "join"})));
+
+    // Label text on the tabs, standing up from them as a body of its own, so it can be printed
+    // in another filament.
+    if hollow && o.label && o.label_text.iter().any(|t| !t.trim().is_empty()) {
+        let mut items = Vec::new();
+        for (t, (x, y, aw, ad)) in o.label_text.iter().zip(label_areas(o)) {
+            let t = t.trim();
+            if t.is_empty() {
+                continue;
+            }
+            let h = label_size(o, t, aw, ad);
+            // the baseline sits so capitals (and descenders) are centred in the area
+            let base = y - h / 2.0 + if descends(t) { 0.125 * h } else { 0.0 };
+            items.push(cmd("sketch.text", json!({"text": t, "at": [r4(x), r4(base)], "height": r4(h), "align": "center"})));
+        }
+        sketch(&mut out, z, &n("Label text"), items);
+        out.push(extrude(&n("Label text"), o.text_height, Op::New(&n("Label")), None, "positive"));
+        // SolidCraft makes each letter a body: join them into one (pieces that touch nothing
+        // stay one body)
+        out.push(cmd("solid.combine", json!({"target": n("Label"), "tools": ["@rest"], "operation": "join"})));
+    }
     out
 }
 
@@ -493,6 +578,7 @@ mod tests {
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
         BinOptions { nx, ny, pitch: [PITCH; 2], units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, fill: 0.0, scoop: 0.0, label: false,
+            label_text: vec![], text_size: 0.0, text_height: 0.4,
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 

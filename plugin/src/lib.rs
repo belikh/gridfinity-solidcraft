@@ -6,7 +6,7 @@ pub mod geometry;
 pub mod plate;
 
 use drawer::{drawer_commands, DrawerOptions, Filler};
-use geometry::{baseplate_commands, bin_commands, bin_inside_top, BaseplateOptions, BinOptions, FLOOR_Z, HALF_PITCH, PITCH, UNIT_H};
+use geometry::{baseplate_commands, bin_commands, bin_inside_top, label_areas, label_size, text_depth, text_width, BaseplateOptions, BinOptions, FLOOR_Z, HALF_PITCH, PITCH, UNIT_H};
 use serde_json::{Map, Value};
 use serde_json::json;
 
@@ -155,7 +155,17 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         return Err(format!("Fill height must be from {FLOOR_Z} to {max_fill} mm for a {units}-unit bin{}, or 0 to fill it to the top.",
             if lip { "" } else { " without stacking lip" }));
     }
-    Ok(BinOptions {
+    let mut label_text: Vec<String> = match p.get("inside_label_text") {
+        None | Some(Value::Null) => vec![],
+        Some(Value::String(s)) if s.trim().is_empty() => vec![],
+        Some(Value::String(s)) => s.split(';').map(|t| t.trim().to_string()).collect(),
+        _ => return Err("Label text must be text: one label per compartment, separated by ;".into()),
+    };
+    // a ; at the end adds no compartment
+    while label_text.last().is_some_and(|t| t.is_empty()) {
+        label_text.pop();
+    }
+    let mut o = BinOptions {
         nx,
         ny,
         pitch,
@@ -169,9 +179,54 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         fill,
         scoop: get_mm(p, "inside_scoop", 0.0, 0.0, 40.0)?,
         label: get_b(p, &["inside_label_tab"], false)?,
+        text_size: get_mm(p, "inside_label_text_size", 0.0, 0.0, 20.0)?,
+        text_height: get_mm(p, "inside_label_text_height", 0.4, 0.1, 3.0)?,
+        label_text,
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity{half} bin {nx}x{ny}x{units}"))?,
-    })
+    };
+    if o.label_text.iter().any(|t| !t.is_empty()) {
+        check_label_text(&mut o)?;
+    }
+    Ok(o)
+}
+
+/// Label text is slow in the desktop app: SolidCraft checks every letter as a body of its own,
+/// about half a second each, and a compartment with a label tab costs about as much. A run may
+/// take this many of the two together (30 seconds).
+const LABEL_BUDGET: usize = 50;
+
+/// Label text puts a label tab on the bin, and every label must fit on its tab.
+fn check_label_text(o: &mut BinOptions) -> Result<(), String> {
+    if o.solid {
+        return Err("Label text needs a hollow bin: solid bins have no label tabs.".into());
+    }
+    o.label = true;
+    let areas = label_areas(o);
+    if o.label_text.len() > areas.len() {
+        return Err(format!("{} labels, but the bin has {} compartments: give one label per compartment, separated by ;, \
+            back row first, left to right.", o.label_text.len(), areas.len()));
+    }
+    let glyphs: usize = o.label_text.iter().map(|t| t.chars().filter(|c| !c.is_whitespace()).count()).sum();
+    let room = LABEL_BUDGET.saturating_sub(areas.len());
+    if glyphs > room {
+        return Err(format!("{glyphs} letters and digits of label text take longer than SolidCraft allows a plugin \
+            (30 seconds): with {} compartments, use at most {room}. Shorter labels, or fewer compartments, will do.", areas.len()));
+    }
+    for (t, &(_, _, w, d)) in o.label_text.iter().zip(&areas) {
+        if t.is_empty() {
+            continue;
+        }
+        let h = label_size(o, t, w, d);
+        if h < 2.0 {
+            return Err(format!("\"{t}\" does not fit on its label tab ({w:.0} mm wide): make it shorter or the bin wider."));
+        }
+        if text_width(t, h) > w + 0.01 || h * text_depth(t) > d + 0.01 {
+            return Err(format!("\"{t}\" at {h} mm does not fit on its label tab ({w:.0} x {d:.0} mm): make the text smaller, \
+                or set Label text size to 0 to fit it automatically."));
+        }
+    }
+    Ok(())
 }
 
 pub fn parse_baseplate(params: &Value) -> Result<BaseplateOptions, String> {
@@ -321,6 +376,7 @@ impl Runner {
                     match v.as_str() {
                         Some("@created") => out.extend(self.created.iter().cloned()),
                         Some("@last") => out.extend(self.created.last().cloned()),
+                        Some("@rest") => out.extend(self.created.iter().skip(1).cloned()),
                         Some(s) => out.push(json!(body(s))),
                         None => out.push(v.clone()),
                     }
@@ -361,8 +417,9 @@ impl Runner {
             _ => {}
         }
         if let Some(Value::Array(made)) = reply.get("created_bodies") {
-            // `@created` / `@last`: the copies the last body pattern made
-            if name == "solid.pattern.rectangular" {
+            // `@created` / `@last`: the copies the last body pattern made; `@rest`: all but the
+            // first body an extrude made in pieces (text: a body for each letter)
+            if name == "solid.pattern.rectangular" || (name == "solid.extrude" && made.len() > 1) {
                 self.created = made.clone();
             }
             // the body this command asked to make, by the name SolidCraft gave it
@@ -463,6 +520,10 @@ mod guest {
                     control::progress(i as f32 / total as f32, &format!("Gridfinity: step {} of {total}", i + 1));
                 }
                 let (name, args) = run.prepare(c);
+                // nothing to join (the text came out as one piece)
+                if name == "solid.combine" && args["tools"].as_array().is_some_and(|t| t.is_empty()) {
+                    continue;
+                }
                 let reply = commands::run(&name, &args.to_string())?;
                 run.record(c, &serde_json::from_str(&reply).unwrap_or(Value::Null));
             }
@@ -553,6 +614,33 @@ mod tests {
         let (_, a) = plan("baseplate", &json!({"width": 2})).unwrap();
         let (_, z) = plan("baseplate", &json!({"width": 2, "filler_left": 0})).unwrap();
         assert_eq!(a, z);
+    }
+
+    #[test]
+    fn label_text() {
+        // text adds the tab; one label per compartment, back row first
+        let o = parse_bin(&json!({"width": 2, "dividers_x": 1, "inside_label_text": "M3x6; M3x8"})).unwrap();
+        assert!(o.label);
+        assert_eq!(o.label_text, vec!["M3x6", "M3x8"]);
+        let (_, c) = plan("bin", &json!({"width": 2, "dividers_x": 1, "inside_label_text": "M3x6;; "})).unwrap();
+        let texts: Vec<_> = c.iter().filter(|v| v["command"] == "sketch.text").collect();
+        assert_eq!(texts.len(), 1);
+        // left compartment, on the back tab
+        let at = texts[0]["params"]["at"].as_array().unwrap();
+        assert!(at[0].as_f64().unwrap() < 42.0 && at[1].as_f64().unwrap() > 30.0);
+        let last = c.last().unwrap();
+        assert_eq!((last["command"].as_str(), last["params"]["tools"][0].as_str()), (Some("solid.combine"), Some("@rest")));
+        // no text, no text commands
+        let (_, c) = plan("bin", &json!({"inside_label_tab": true})).unwrap();
+        assert!(!c.iter().any(|v| v["command"] == "sketch.text"));
+
+        assert!(parse_bin(&json!({"inside_label_text": "a; b"})).unwrap_err().contains("2 labels, but the bin has 1 compartments"));
+        assert!(parse_bin(&json!({"inside": "Solid (for custom cutouts)", "inside_label_text": "x"})).unwrap_err().contains("hollow"));
+        assert!(parse_bin(&json!({"inside_label_text": "A very long label for one small cell"})).unwrap_err().contains("does not fit"));
+        assert!(parse_bin(&json!({"width": 2, "inside_label_text": "M3", "inside_label_text_size": 8})).unwrap_err().contains("at 8 mm"));
+        let many = vec!["M3x10"; 17].join(";");
+        assert!(parse_bin(&json!({"width": 4, "depth": 4, "dividers_x": 5, "dividers_y": 5, "inside_label_text": many}))
+            .unwrap_err().contains("85 letters and digits of label text take longer than SolidCraft allows a plugin (30 seconds): with 36 compartments, use at most 14"));
     }
 
     #[test]
