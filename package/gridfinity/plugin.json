@@ -1,7 +1,7 @@
 {
  "id": "gridfinity",
  "name": "Gridfinity",
- "version": "0.8.1",
+ "version": "0.9.0",
  "description": "Gridfinity bins (hollow or solid for custom cutouts), baseplates and drawer baseplates split to fit your printer, on a full, half or custom grid.",
  "capabilities": [
   "commands@0.1"
@@ -89,7 +89,7 @@
       "inside_label_text": {
        "type": "string",
        "title": "Label text (a; b; c)",
-       "description": "Text on the label tab, as its own body so it can be printed in another filament. One label per compartment, separated by ; (back row first, left to right), e.g. M3x6; M3x8; Washers. Adds the label tab (hollow bins only)",
+       "description": "Text on the label tab, as its own body so it can be printed in another filament. One label per compartment, separated by ; (back row first, left to right), e.g. M3x6; M3x8; Washers. Each label becomes a text parameter (Label_1, Label_2, ...): change it in Parameters to relabel. Adds the label tab (hollow bins only)",
        "maxLength": 200,
        "default": ""
       },
@@ -111,6 +111,13 @@
         "Flush (inlaid)"
        ],
        "default": "Raised"
+      },
+      "inside_label_text_font": {
+       "type": "string",
+       "title": "Label text font",
+       "description": "An installed font, e.g. Arial, DejaVu Sans or Segoe UI. Empty = SolidCraft's built-in font. Sizes are fitted for the built-in one, so a wide font may need a smaller Label text size",
+       "maxLength": 200,
+       "default": ""
       },
       "inside_label_text_height": {
        "type": "number",
@@ -513,7 +520,10 @@
    "solid.pattern.rectangular",
    "solid.combine",
    "sketch.rectangle.two_point",
-   "sketch.text"
+   "sketch.text",
+   "parameters.add",
+   "parameters.list",
+   "model.body_features"
   ],
   "limits": {
    "fuel": 2000000000,

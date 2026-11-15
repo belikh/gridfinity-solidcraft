@@ -30,8 +30,14 @@ one undo step, editable afterwards, and they keep working without the plugin.
   label body its own filament. It either stands up from the tab or is sunk into it with its top
   flush with the tab, for a flat two-colour label (`inside_label_text_style`: "Raised" or "Flush
   (inlaid)"), by `inside_label_text_height` (0.4 mm by default, so one or two layers). The size
-  (`inside_label_text_size`, capital height) is picked to fit the tab unless you set it. Text adds
+  (`inside_label_text_size`, capital height) is picked to fit the tab unless you set it, and
+  `inside_label_text_font` takes any installed font (empty: SolidCraft's built-in one). Text adds
   a label tab by itself.
+  Each label becomes a **text parameter** (`Label_1`, `Label_2`, …, `Bin2_Label_1` for the next
+  bin): change it in **Parameters** and the label follows, without running the plugin again. The
+  size stays as it was fitted, so keep a new label about as long. The label's extrude shows a
+  warning that its letters don't touch the label body: that is expected, they are kept as one body
+  on purpose.
 - **Solid bins** (`inside`: "Solid (for custom cutouts)"): filled to the top of the walls with the
   stacking lip around, so you can sketch on the flat top and cut holders for your own tools
   ([example](examples/solid-holder.json)). Set a **fill height** (`inside_fill_height`, mm from the
@@ -66,6 +72,10 @@ one undo step, editable afterwards, and they keep working without the plugin.
 |---|---|
 | ![Label text](docs/images/bin-label-text.png) | ![Flush label text](docs/images/bin-label-flush.png) |
 
+| The labels in Parameters | Label text in DejaVu Serif |
+|---|---|
+| ![Parameters](docs/images/label-parameters.png) | ![Font](docs/images/bin-label-font.png) |
+
 ![Label text fields](docs/images/dialog-label-text.png)
 
 | Solid 3×2×6 bin filled to 20 mm, with cutouts | Cut through: solid fill below, open above |
@@ -84,16 +94,16 @@ Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-opens
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
 measuring its cross-sections. Not yet printed: please report how it fits.
 
-> Status: early (0.8.1). Tested with SolidCraft 0.41.0 and 0.42.0, both through scripts/`solidcraft-cli` and in
+> Status: early (0.9.0). Tested with SolidCraft 0.41.0 and 0.42.0, both through scripts/`solidcraft-cli` and in
 > the desktop app's plugin dialog. SolidCraft's plugin runtime is itself experimental, so other
 > versions may refuse the package.
 
 ## Install
-Download `gridfinity-0.8.1.zip` from the [latest release](../../releases/latest), then in SolidCraft:
+Download `gridfinity-0.9.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
 **Plugins › Install plugin…** (or **Preferences › Plugins**) and pick the zip. From a script:
 
 ```json
-{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.8.1.zip"}}]}
+{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.9.0.zip"}}]}
 ```
 
 Add `"replace": true` to update an installed version. You can also unpack the zip into
@@ -146,7 +156,7 @@ run an entry with that hash ([examples/](examples/)).
 
 | Entry | Parameters (default) |
 |---|---|
-| `bin` | `grid` "42 mm (full)" / "21 mm (half)" / "Custom (sizes below)", `custom_size_x`, `custom_size_y` 15–100 mm (42, Custom only), `width` up to 504 mm and 24 cells (1), `depth` (1), `height` 2–20 units (3), `inside` "Hollow" / "Solid (for custom cutouts)", `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `inside_scoop` 0–40 mm (0), `inside_label_tab` (false), `inside_label_text` (labels separated by `;`), `inside_label_text_size` 0–20 mm (0: fit), `inside_label_text_height` 0.1–3 mm (0.4), `inside_label_text_style` "Raised" / "Flush (inlaid)", `inside_fill_height` mm (0: to the top; solid bins, from 6 mm to 1 mm under the inside top), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
+| `bin` | `grid` "42 mm (full)" / "21 mm (half)" / "Custom (sizes below)", `custom_size_x`, `custom_size_y` 15–100 mm (42, Custom only), `width` up to 504 mm and 24 cells (1), `depth` (1), `height` 2–20 units (3), `inside` "Hollow" / "Solid (for custom cutouts)", `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `inside_scoop` 0–40 mm (0), `inside_label_tab` (false), `inside_label_text` (labels separated by `;`), `inside_label_text_size` 0–20 mm (0: fit), `inside_label_text_height` 0.1–3 mm (0.4), `inside_label_text_style` "Raised" / "Flush (inlaid)", `inside_label_text_font` (installed font, empty: built-in), `inside_fill_height` mm (0: to the top; solid bins, from 6 mm to 1 mm under the inside top), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
 | `baseplate` | `grid`, `custom_size_x`, `custom_size_y`, `width` (3), `depth` (3), `bottom` "Solid" / "Open (frame only)", `holes_magnet` (false, solid only), `filler_left`, `filler_right`, `filler_front`, `filler_back` 0–200 mm (0), `position_x`, `position_y` mm (0, the corner of the plate with its filler), `title` |
 | `drawer` | `drawer_width`, `drawer_depth` 15–1000 mm (300), `printer_x`, `printer_y` 50–1000 mm (256), `grid`, `custom_size_x`, `custom_size_y`, `bottom`, `holes_magnet`, `filler_x` "Even (both sides)" / "Left" / "Right", `filler_y` "Even (both sides)" / "Front" / "Back", `piece` (0: all), `position_x`, `position_y` mm (0), `title` |
 

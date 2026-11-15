@@ -68,6 +68,8 @@ pub struct BinOptions {
     pub text_height: f64,
     /// Label text sunk into the tab, its top flush with the tab, instead of standing up from it.
     pub flush: bool,
+    /// Font of the label text: an installed family or a font file ("": the built-in font).
+    pub font: String,
     pub origin: [f64; 2],
     pub name: String,
 }
@@ -488,7 +490,8 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     // it can be printed in another filament.
     if hollow && o.label && o.label_text.iter().any(|t| !t.trim().is_empty()) {
         let mut items = Vec::new();
-        for (t, (x, y, aw, ad)) in o.label_text.iter().zip(label_areas(o)) {
+        let cols = o.div_x + 1;
+        for (i, (t, (x, y, aw, ad))) in o.label_text.iter().zip(label_areas(o)).enumerate() {
             let t = t.trim();
             if t.is_empty() {
                 continue;
@@ -496,13 +499,33 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
             let h = label_size(o, t, aw, ad);
             // the baseline sits so capitals (and descenders) are centred in the area
             let base = y - h / 2.0 + if descends(t) { 0.125 * h } else { 0.0 };
-            items.push(cmd("sketch.text", json!({"text": t, "at": [r4(x), r4(base)], "height": r4(h), "align": "center"})));
+            // each label is a text parameter (the runner makes its name unique in the design), so
+            // it can be changed in Parameters without running the plugin again
+            let param = format!("Label_{}", i + 1);
+            out.push(cmd("parameters.add", json!({"name": param, "expression": t, "unit": "text",
+                "comment": format!("{b}: label of row {}, compartment {} (from the back, left to right)",
+                    i as u32 / cols + 1, i as u32 % cols + 1)})));
+            let mut text = json!({"text_expression": param, "at": [r4(x), r4(base)], "height": r4(h), "align": "center"});
+            if !o.font.is_empty() {
+                text["font"] = json!(o.font);
+            }
+            items.push(cmd("sketch.text", text));
         }
+        // SolidCraft makes text extruded as a new body a body for each letter, and a label
+        // changed later in Parameters would add letters as loose bodies. So the text joins a
+        // small seed block beside the bin instead (pieces that touch nothing stay one body),
+        // and the seed is cut away again: one label body, whatever the text becomes.
+        let lz = if o.flush { z - o.text_height } else { z };
+        let seed = |op: &str, grow: f64| cmd("solid.box", json!({"corner": [r4(o.origin[0] - 10.0 - grow), r4(o.origin[1] - 10.0 - grow), r4(lz - grow)],
+            "length": r4(1.0 + 2.0 * grow), "width": r4(1.0 + 2.0 * grow), "height": r4(o.text_height + 2.0 * grow), "operation": op}));
+        let mut first = seed("new", 0.0);
+        first["params"]["body_name"] = json!(n("Label"));
+        out.push(first);
         sketch(&mut out, z, &n("Label text"), items);
-        out.push(extrude(&n("Label text"), o.text_height, Op::New(&n("Label")), None, if o.flush { "negative" } else { "positive" }));
-        // SolidCraft makes each letter a body: join them into one (pieces that touch nothing
-        // stay one body)
-        out.push(cmd("solid.combine", json!({"target": n("Label"), "tools": ["@rest"], "operation": "join"})));
+        out.push(extrude(&n("Label text"), o.text_height, Op::Join(&n("Label")), None, if o.flush { "negative" } else { "positive" }));
+        let mut cut = seed("cut", 0.5);
+        cut["params"]["targets"] = json!([n("Label")]);
+        out.push(cut);
         if o.flush {
             // sunk into the tab: cut its room out of the bin, keeping the text
             out.push(cmd("solid.combine", json!({"target": b, "tools": [n("Label")], "operation": "cut", "keep_tools": true})));
@@ -587,7 +610,7 @@ mod tests {
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
         BinOptions { nx, ny, pitch: [PITCH; 2], units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, fill: 0.0, scoop: 0.0, label: false,
-            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false,
+            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(),
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 

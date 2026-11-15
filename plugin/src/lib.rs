@@ -187,6 +187,11 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
             Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("flush") => true,
             _ => return Err("Label text style must be \"Raised\" or \"Flush (inlaid)\"".into()),
         },
+        font: match p.get("inside_label_text_font") {
+            None | Some(Value::Null) => String::new(),
+            Some(Value::String(s)) if s.trim().len() <= 200 => s.trim().to_string(),
+            _ => return Err("Label text font must be the name of an installed font, or empty for the built-in one".into()),
+        },
         label_text,
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity{half} bin {nx}x{ny}x{units}"))?,
@@ -367,9 +372,37 @@ pub struct Runner {
     created: Vec<Value>,
     bodies: std::collections::HashMap<String, String>,
     sketches: std::collections::HashMap<String, Value>,
+    /// Text parameter names the plan uses, and the names they get in the design.
+    params: std::collections::HashMap<String, String>,
+}
+
+/// A name for a new body called `name` that no body in the design has, nor its parts (the
+/// bodies named `<name> Label`, ...): `name` itself if it is free, else `name (2)`, `name (3)`, ...
+pub fn free_name(name: &str, existing: &[String]) -> Option<String> {
+    let taken = |n: &str| existing.iter().any(|e| e.eq_ignore_ascii_case(n)
+        || e.to_lowercase().starts_with(&format!("{} ", n.to_lowercase())));
+    if !taken(name) {
+        return None;
+    }
+    (2..).map(|k| format!("{name} ({k})")).find(|n| !taken(n))
+}
+
+/// The text parameters a plan adds.
+pub fn planned_params(cmds: &[Value]) -> Vec<String> {
+    cmds.iter().filter(|c| c["command"] == "parameters.add")
+        .filter_map(|c| c["params"]["name"].as_str().map(String::from)).collect()
 }
 
 impl Runner {
+    /// Give the plan's parameters names no parameter in the design has yet: Label_1, Label_2,
+    /// ... for the first bin, Bin2_Label_1, ... for the next.
+    pub fn name_params(&mut self, planned: &[String], existing: &[String]) {
+        let taken = |n: &String| existing.iter().any(|e| e.eq_ignore_ascii_case(n));
+        let prefix = (1..).map(|k: u32| if k == 1 { String::new() } else { format!("Bin{k}_") })
+            .find(|pre| !planned.iter().any(|p| taken(&format!("{pre}{p}")))).unwrap();
+        self.params = planned.iter().map(|p| (p.clone(), format!("{prefix}{p}"))).collect();
+    }
+
     pub fn prepare(&self, c: &Value) -> (String, Value) {
         let name = c["command"].as_str().unwrap_or_default();
         if name == "@pattern" {
@@ -384,7 +417,6 @@ impl Runner {
                     match v.as_str() {
                         Some("@created") => out.extend(self.created.iter().cloned()),
                         Some("@last") => out.extend(self.created.last().cloned()),
-                        Some("@rest") => out.extend(self.created.iter().skip(1).cloned()),
                         Some(s) => out.push(json!(body(s))),
                         None => out.push(v.clone()),
                     }
@@ -395,6 +427,13 @@ impl Runner {
         for key in ["target", "body"] {
             if let Some(s) = p.get(key).and_then(|v| v.as_str()) {
                 p[key] = json!(body(s));
+            }
+        }
+        for key in ["name", "text_expression"] {
+            if name == "parameters.add" || name == "sketch.text" {
+                if let Some(v) = p.get(key).and_then(|v| v.as_str()).and_then(|v| self.params.get(v)) {
+                    p[key] = json!(v);
+                }
             }
         }
         if let Some(s) = p.get("sketch").and_then(|v| v.as_str()) {
@@ -425,9 +464,8 @@ impl Runner {
             _ => {}
         }
         if let Some(Value::Array(made)) = reply.get("created_bodies") {
-            // `@created` / `@last`: the copies the last body pattern made; `@rest`: all but the
-            // first body an extrude made in pieces (text: a body for each letter)
-            if name == "solid.pattern.rectangular" || (name == "solid.extrude" && made.len() > 1) {
+            // `@created` / `@last`: the copies the last body pattern made
+            if name == "solid.pattern.rectangular" {
                 self.created = made.clone();
             }
             // the body this command asked to make, by the name SolidCraft gave it
@@ -515,10 +553,30 @@ mod guest {
         fn execute(entry: String, params: String) -> Result<String, PluginError> {
             let params: Value = serde_json::from_str(if params.trim().is_empty() { "{}" } else { &params })
                 .map_err(|e| PluginError::InvalidInput(FieldFailure { field: "params".into(), reason: e.to_string() }))?;
-            let (body, cmds) = plan(&entry, &params)
-                .map_err(|reason| PluginError::InvalidInput(FieldFailure { field: entry.clone(), reason }))?;
+            let invalid = |reason| PluginError::InvalidInput(FieldFailure { field: entry.clone(), reason });
+            let (mut body, mut cmds) = plan(&entry, &params).map_err(invalid)?;
+            // A body named like one already in the design would get an automatic name
+            // ("Body2") that SolidCraft doesn't keep when it rebuilds, and the features made for
+            // it would lose it: give it a free name of its own instead.
+            let list: Value = serde_json::from_str(&commands::run("model.body_features", &json!({}).to_string())?).unwrap_or(Value::Null);
+            let list = list.get("result").unwrap_or(&list);
+            let existing: Vec<String> = list["bodies"].as_array().into_iter().flatten()
+                .filter_map(|b| b["body"].as_str().map(String::from)).collect();
+            if let Some(free) = free_name(&body, &existing) {
+                let mut p = params.clone();
+                p["title"] = json!(free);
+                (body, cmds) = plan(&entry, &p).map_err(invalid)?;
+            }
             let total = cmds.len();
             let mut run = Runner::default();
+            let planned = planned_params(&cmds);
+            if !planned.is_empty() {
+                let list: Value = serde_json::from_str(&commands::run("parameters.list", &json!({"filter": "user"}).to_string())?).unwrap_or(Value::Null);
+                let list = list.get("result").unwrap_or(&list);
+                let existing: Vec<String> = list["parameters"].as_array().into_iter().flatten()
+                    .filter_map(|p| p["name"].as_str().map(String::from)).collect();
+                run.name_params(&planned, &existing);
+            }
             for (i, c) in cmds.iter().enumerate() {
                 // progress and cancel checks are host calls too, and a run may make only 256
                 if i % 16 == 0 {
@@ -528,10 +586,6 @@ mod guest {
                     control::progress(i as f32 / total as f32, &format!("Gridfinity: step {} of {total}", i + 1));
                 }
                 let (name, args) = run.prepare(c);
-                // nothing to join (the text came out as one piece)
-                if name == "solid.combine" && args["tools"].as_array().is_some_and(|t| t.is_empty()) {
-                    continue;
-                }
                 let reply = commands::run(&name, &args.to_string())?;
                 run.record(c, &serde_json::from_str(&reply).unwrap_or(Value::Null));
             }
@@ -636,8 +690,10 @@ mod tests {
         // left compartment, on the back tab
         let at = texts[0]["params"]["at"].as_array().unwrap();
         assert!(at[0].as_f64().unwrap() < 42.0 && at[1].as_f64().unwrap() > 30.0);
+        // the text joins a seed block, which is cut away after
         let last = c.last().unwrap();
-        assert_eq!((last["command"].as_str(), last["params"]["tools"][0].as_str()), (Some("solid.combine"), Some("@rest")));
+        assert_eq!((last["command"].as_str(), last["params"]["operation"].as_str(), last["params"]["targets"][0].as_str()),
+            (Some("solid.box"), Some("cut"), Some("Gridfinity bin 2x1x3 Label")));
         // flush: sunk into the tab, then cut out of the bin keeping the text
         let (_, c) = plan("bin", &json!({"inside_label_text": "M3", "inside_label_text_style": "Flush (inlaid)"})).unwrap();
         let ext = c.iter().rev().find(|v| v["command"] == "solid.extrude").unwrap();
@@ -648,6 +704,24 @@ mod tests {
         let flush = json!({"width": 3, "depth": 2, "dividers_x": 2, "dividers_y": 1, "inside_label_text_style": "Flush (inlaid)",
             "inside_label_text": "M3x6 bolt; M3x8 bolt; M3x10 bolt"});
         assert!(parse_bin(&flush).unwrap_err().contains("with 6 compartments, use at most 22"));
+        // labels are text parameters, named so they don't clash with ones already in the design
+        let (_, c) = plan("bin", &json!({"width": 2, "dividers_x": 1, "inside_label_text": "M3; M4", "inside_label_text_font": "DejaVu Sans"})).unwrap();
+        let planned = planned_params(&c);
+        assert_eq!(planned, vec!["Label_1", "Label_2"]);
+        let mut run = Runner::default();
+        run.name_params(&planned, &["Label_2".into(), "Width".into()]);
+        let text = c.iter().find(|v| v["command"] == "sketch.text").unwrap();
+        let (_, p) = run.prepare(text);
+        assert_eq!((p["text_expression"].as_str(), p["font"].as_str()), (Some("Bin2_Label_1"), Some("DejaVu Sans")));
+        let add = c.iter().find(|v| v["command"] == "parameters.add").unwrap();
+        assert_eq!(run.prepare(add).1["name"], "Bin2_Label_1");
+        run.name_params(&planned, &[]);
+        assert_eq!(run.prepare(add).1["name"], "Label_1");
+        // a second bin of the same size gets a name of its own
+        let have = vec!["Gridfinity bin 1x1x3".to_string(), "Gridfinity bin 1x1x3 Label".into(), "Gridfinity bin 1x1x3 (2)".into()];
+        assert_eq!(free_name("Gridfinity bin 1x1x3", &have).as_deref(), Some("Gridfinity bin 1x1x3 (3)"));
+        assert_eq!(free_name("Gridfinity bin 2x1x3", &have), None);
+        assert_eq!(free_name("Gridfinity bin 1x1", &have), None);
         // no text, no text commands
         let (_, c) = plan("bin", &json!({"inside_label_tab": true})).unwrap();
         assert!(!c.iter().any(|v| v["command"] == "sketch.text"));
