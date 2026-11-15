@@ -1,7 +1,7 @@
 {
  "id": "gridfinity",
  "name": "Gridfinity",
- "version": "0.8.0",
+ "version": "0.8.1",
  "description": "Gridfinity bins (hollow or solid for custom cutouts), baseplates and drawer baseplates split to fit your printer, on a full, half or custom grid.",
  "capabilities": [
   "commands@0.1"
@@ -88,8 +88,8 @@
       },
       "inside_label_text": {
        "type": "string",
-       "title": "Label text",
-       "description": "Text on the label tab, standing up from it as its own body so it can be printed in another filament. One label per compartment, separated by ; (back row first, left to right). Adds the label tab (hollow bins only)",
+       "title": "Label text (a; b; c)",
+       "description": "Text on the label tab, as its own body so it can be printed in another filament. One label per compartment, separated by ; (back row first, left to right), e.g. M3x6; M3x8; Washers. Adds the label tab (hollow bins only)",
        "maxLength": 200,
        "default": ""
       },
@@ -102,10 +102,20 @@
        "default": 0,
        "unit": "mm"
       },
+      "inside_label_text_style": {
+       "type": "string",
+       "title": "Label text style",
+       "description": "Raised: the text stands up from the tab. Flush (inlaid): it is sunk into the tab, its top level with the tab, for a flat label in two colours",
+       "enum": [
+        "Raised",
+        "Flush (inlaid)"
+       ],
+       "default": "Raised"
+      },
       "inside_label_text_height": {
        "type": "number",
        "title": "Label text height",
-       "description": "How far the label text stands up from the tab, e.g. one or two layers",
+       "description": "How far the label text stands up from the tab, or how deep it is sunk in (flush), e.g. one or two layers",
        "minimum": 0.1,
        "maximum": 3,
        "default": 0.4,

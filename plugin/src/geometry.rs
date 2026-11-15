@@ -66,6 +66,8 @@ pub struct BinOptions {
     /// How far the label text stands up from the tab (mm). It is a body of its own, so it can
     /// be printed in another filament.
     pub text_height: f64,
+    /// Label text sunk into the tab, its top flush with the tab, instead of standing up from it.
+    pub flush: bool,
     pub origin: [f64; 2],
     pub name: String,
 }
@@ -119,7 +121,10 @@ pub fn label_areas(o: &BinOptions) -> Vec<(f64, f64, f64, f64)> {
         let hi = y0 + id * (k + 1) as f64 / rows as f64 - if k + 1 < rows { DIVIDER / 2.0 } else { 0.0 };
         // the lip hangs over the back of the last row's tab
         let hidden = if k + 1 == rows && o.lip { LIP.0 + LIP.2 - WALL } else { 0.0 };
-        let (front, back) = (hi - label + LABEL_MARGIN_Y, hi - hidden - LABEL_MARGIN_Y);
+        // under the tab's front edge the 45° underside leaves it thin: sunk text keeps its depth
+        // plus the margin of tab under it
+        let thin = if o.flush { o.text_height } else { 0.0 };
+        let (front, back) = (hi - label + LABEL_MARGIN_Y + thin, hi - hidden - LABEL_MARGIN_Y);
         for j in 0..cols {
             let lo_x = x0 + iw * j as f64 / cols as f64 + if j > 0 { DIVIDER / 2.0 } else { 0.0 };
             let hi_x = x0 + iw * (j + 1) as f64 / cols as f64 - if j + 1 < cols { DIVIDER / 2.0 } else { 0.0 };
@@ -479,8 +484,8 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     }
     out.push(cmd("solid.combine", json!({"target": b, "tools": feet, "operation": "join"})));
 
-    // Label text on the tabs, standing up from them as a body of its own, so it can be printed
-    // in another filament.
+    // Label text on the tabs, standing up from them or sunk in flush, as a body of its own, so
+    // it can be printed in another filament.
     if hollow && o.label && o.label_text.iter().any(|t| !t.trim().is_empty()) {
         let mut items = Vec::new();
         for (t, (x, y, aw, ad)) in o.label_text.iter().zip(label_areas(o)) {
@@ -494,10 +499,14 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
             items.push(cmd("sketch.text", json!({"text": t, "at": [r4(x), r4(base)], "height": r4(h), "align": "center"})));
         }
         sketch(&mut out, z, &n("Label text"), items);
-        out.push(extrude(&n("Label text"), o.text_height, Op::New(&n("Label")), None, "positive"));
+        out.push(extrude(&n("Label text"), o.text_height, Op::New(&n("Label")), None, if o.flush { "negative" } else { "positive" }));
         // SolidCraft makes each letter a body: join them into one (pieces that touch nothing
         // stay one body)
         out.push(cmd("solid.combine", json!({"target": n("Label"), "tools": ["@rest"], "operation": "join"})));
+        if o.flush {
+            // sunk into the tab: cut its room out of the bin, keeping the text
+            out.push(cmd("solid.combine", json!({"target": b, "tools": [n("Label")], "operation": "cut", "keep_tools": true})));
+        }
     }
     out
 }
@@ -578,7 +587,7 @@ mod tests {
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
         BinOptions { nx, ny, pitch: [PITCH; 2], units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, fill: 0.0, scoop: 0.0, label: false,
-            label_text: vec![], text_size: 0.0, text_height: 0.4,
+            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false,
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 

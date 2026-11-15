@@ -181,6 +181,12 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         label: get_b(p, &["inside_label_tab"], false)?,
         text_size: get_mm(p, "inside_label_text_size", 0.0, 0.0, 20.0)?,
         text_height: get_mm(p, "inside_label_text_height", 0.4, 0.1, 3.0)?,
+        flush: match p.get("inside_label_text_style") {
+            None | Some(Value::Null) => false,
+            Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("raised") => false,
+            Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("flush") => true,
+            _ => return Err("Label text style must be \"Raised\" or \"Flush (inlaid)\"".into()),
+        },
         label_text,
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity{half} bin {nx}x{ny}x{units}"))?,
@@ -193,7 +199,7 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
 
 /// Label text is slow in the desktop app: SolidCraft checks every letter as a body of its own,
 /// about half a second each, and a compartment with a label tab costs about as much. A run may
-/// take this many of the two together (30 seconds).
+/// take this many of the two together (30 seconds); sunk (flush) letters count twice.
 const LABEL_BUDGET: usize = 50;
 
 /// Label text puts a label tab on the bin, and every label must fit on its tab.
@@ -208,7 +214,9 @@ fn check_label_text(o: &mut BinOptions) -> Result<(), String> {
             back row first, left to right.", o.label_text.len(), areas.len()));
     }
     let glyphs: usize = o.label_text.iter().map(|t| t.chars().filter(|c| !c.is_whitespace()).count()).sum();
-    let room = LABEL_BUDGET.saturating_sub(areas.len());
+    // sunk text is cut out of the bin as well: each letter costs about twice as much
+    let per = if o.flush { 2 } else { 1 };
+    let room = LABEL_BUDGET.saturating_sub(areas.len()) / per;
     if glyphs > room {
         return Err(format!("{glyphs} letters and digits of label text take longer than SolidCraft allows a plugin \
             (30 seconds): with {} compartments, use at most {room}. Shorter labels, or fewer compartments, will do.", areas.len()));
@@ -630,6 +638,16 @@ mod tests {
         assert!(at[0].as_f64().unwrap() < 42.0 && at[1].as_f64().unwrap() > 30.0);
         let last = c.last().unwrap();
         assert_eq!((last["command"].as_str(), last["params"]["tools"][0].as_str()), (Some("solid.combine"), Some("@rest")));
+        // flush: sunk into the tab, then cut out of the bin keeping the text
+        let (_, c) = plan("bin", &json!({"inside_label_text": "M3", "inside_label_text_style": "Flush (inlaid)"})).unwrap();
+        let ext = c.iter().rev().find(|v| v["command"] == "solid.extrude").unwrap();
+        assert_eq!(ext["params"]["direction"].as_str(), Some("negative"));
+        let last = c.last().unwrap();
+        assert_eq!((last["params"]["operation"].as_str(), last["params"]["keep_tools"].as_bool()), (Some("cut"), Some(true)));
+        assert!(parse_bin(&json!({"inside_label_text_style": "Sunk"})).is_err());
+        let flush = json!({"width": 3, "depth": 2, "dividers_x": 2, "dividers_y": 1, "inside_label_text_style": "Flush (inlaid)",
+            "inside_label_text": "M3x6 bolt; M3x8 bolt; M3x10 bolt"});
+        assert!(parse_bin(&flush).unwrap_err().contains("with 6 compartments, use at most 22"));
         // no text, no text commands
         let (_, c) = plan("bin", &json!({"inside_label_tab": true})).unwrap();
         assert!(!c.iter().any(|v| v["command"] == "sketch.text"));
