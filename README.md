@@ -38,6 +38,10 @@ one undo step, editable afterwards, and they keep working without the plugin.
   size stays as it was fitted, so keep a new label about as long. The label's extrude shows a
   warning that its letters don't touch the label body: that is expected, they are kept as one body
   on purpose.
+- **Height as a parameter**: every bin gets a `Height_units` parameter (`Bin2_Height_units` for
+  the next bin, and so on). Change it in **Parameters** and the bin grows or shrinks with its walls,
+  lip, dividers, fill and labels, without running the plugin again. Scoops and label tabs keep the
+  size they were made with, and the body keeps its name.
 - **Solid bins** (`inside`: "Solid (for custom cutouts)"): filled to the top of the walls with the
   stacking lip around, so you can sketch on the flat top and cut holders for your own tools
   ([example](examples/solid-holder.json)). Set a **fill height** (`inside_fill_height`, mm from the
@@ -72,6 +76,10 @@ one undo step, editable afterwards, and they keep working without the plugin.
 |---|---|
 | ![Label text](docs/images/bin-label-text.png) | ![Flush label text](docs/images/bin-label-flush.png) |
 
+| A 3-unit bin… | …set to 6 units in Parameters |
+|---|---|
+| ![3 units](docs/images/height-3.png) | ![6 units](docs/images/height-6.png) |
+
 | The labels in Parameters | Label text in DejaVu Serif |
 |---|---|
 | ![Parameters](docs/images/label-parameters.png) | ![Font](docs/images/bin-label-font.png) |
@@ -94,16 +102,16 @@ Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-opens
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
 measuring its cross-sections. Not yet printed: please report how it fits.
 
-> Status: early (0.9.0). Tested with SolidCraft 0.41.0 and 0.42.0, both through scripts/`solidcraft-cli` and in
+> Status: 1.0.0. Tested with SolidCraft 0.41.0 and 0.42.0, both through scripts/`solidcraft-cli` and in
 > the desktop app's plugin dialog. SolidCraft's plugin runtime is itself experimental, so other
 > versions may refuse the package.
 
 ## Install
-Download `gridfinity-0.9.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
+Download `gridfinity-1.0.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
 **Plugins › Install plugin…** (or **Preferences › Plugins**) and pick the zip. From a script:
 
 ```json
-{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-0.9.0.zip"}}]}
+{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-1.0.0.zip"}}]}
 ```
 
 Add `"replace": true` to update an installed version. You can also unpack the zip into

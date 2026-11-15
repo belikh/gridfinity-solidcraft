@@ -170,6 +170,7 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         ny,
         pitch,
         units,
+        sized_units: units,
         magnets: get_b(p, &["holes_magnet", "magnets"], false)?,
         screws: get_b(p, &["holes_screw", "screws"], false)?,
         div_x: get_u(p, "dividers_x", 0, 0, MAX_DIVIDERS)?,
@@ -376,6 +377,66 @@ pub struct Runner {
     params: std::collections::HashMap<String, String>,
 }
 
+/// The bin's height as a parameter, `Height_units` (the runner makes its name unique), that
+/// every height in the bin follows. The bin is planned twice more, one and two units taller:
+/// each number that grows by the same step both times is a straight line over the height and
+/// becomes an expression over the parameter; numbers that don't change, or don't change
+/// evenly (a label tab that stops growing at 12 mm), stay as they are.
+fn parametric_height(o: &BinOptions, base: Vec<Value>) -> Vec<Value> {
+    let taller = |k: u32| bin_commands(&BinOptions { units: o.units + k, ..o.clone() });
+    let (one, two) = (Value::Array(taller(1)), Value::Array(taller(2)));
+    let mut base = Value::Array(base);
+    if !same_shape(&base, &one) || !same_shape(&base, &two) {
+        return match base { Value::Array(v) => v, _ => unreachable!() };
+    }
+    let u = o.units as f64;
+    follow(&mut base, &one, &two, &|v0, step| {
+        let a = geometry::r4(v0 - step * u);
+        let step = geometry::r4(step);
+        let sign = if a < 0.0 { "-" } else { "+" };
+        format!("{{Height_units}} * {step} mm {sign} {} mm", a.abs())
+    });
+    let mut out = vec![json!({"command": "parameters.add", "params": {"name": "Height_units", "expression": o.units.to_string(),
+        "unit": "", "comment": format!("{}: height in 7 mm units", o.name)}})];
+    if let Value::Array(v) = base {
+        out.extend(v);
+    }
+    out
+}
+
+/// The same commands with the same keys and lists, differing at most in numbers.
+fn same_shape(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(_), Value::Number(_)) => true,
+        (Value::Array(x), Value::Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(a, b)| same_shape(a, b)),
+        (Value::Object(x), Value::Object(y)) => x.len() == y.len() && x.iter().all(|(k, a)| y.get(k).is_some_and(|b| same_shape(a, b))),
+        _ => a == b,
+    }
+}
+
+/// Replace each number in `v` that steps evenly through `one` and `two` with `expr(value, step)`.
+fn follow(v: &mut Value, one: &Value, two: &Value, expr: &dyn Fn(f64, f64) -> String) {
+    match v {
+        Value::Number(n) => {
+            let (v0, v1, v2) = (n.as_f64().unwrap(), one.as_f64().unwrap(), two.as_f64().unwrap());
+            if (v1 - v0).abs() > 1e-6 && ((v2 - v1) - (v1 - v0)).abs() < 1e-3 {
+                *v = json!(expr(v0, v1 - v0));
+            }
+        }
+        Value::Array(x) => {
+            for (i, e) in x.iter_mut().enumerate() {
+                follow(e, &one[i], &two[i], expr);
+            }
+        }
+        Value::Object(x) => {
+            for (k, e) in x.iter_mut() {
+                follow(e, &one[k], &two[k], expr);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// A name for a new body called `name` that no body in the design has, nor its parts (the
 /// bodies named `<name> Label`, ...): `name` itself if it is free, else `name (2)`, `name (3)`, ...
 pub fn free_name(name: &str, existing: &[String]) -> Option<String> {
@@ -403,6 +464,18 @@ impl Runner {
         self.params = planned.iter().map(|p| (p.clone(), format!("{prefix}{p}"))).collect();
     }
 
+    fn fill_names(&self, v: &mut Value) {
+        match v {
+            Value::String(s) if s.contains('{') => {
+                for (from, to) in &self.params {
+                    *s = s.replace(&format!("{{{from}}}"), to);
+                }
+            }
+            Value::Array(x) => x.iter_mut().for_each(|e| self.fill_names(e)),
+            _ => {}
+        }
+    }
+
     pub fn prepare(&self, c: &Value) -> (String, Value) {
         let name = c["command"].as_str().unwrap_or_default();
         if name == "@pattern" {
@@ -427,6 +500,14 @@ impl Runner {
         for key in ["target", "body"] {
             if let Some(s) = p.get(key).and_then(|v| v.as_str()) {
                 p[key] = json!(body(s));
+            }
+        }
+        // `{Height_units}` in an expression: the parameter's name in the design
+        if !self.params.is_empty() {
+            for (key, v) in p.as_object_mut().into_iter().flatten() {
+                if !(name == "parameters.add" && (key == "expression" || key == "comment")) {
+                    self.fill_names(v);
+                }
             }
         }
         for key in ["name", "text_expression"] {
@@ -515,7 +596,7 @@ pub fn plan(entry: &str, params: &Value) -> Result<(String, Vec<Value>), String>
                 return Err(format!("{cells} cells is too many for one run: SolidCraft gives a plugin 30 seconds, \
                     which is about {fit} cells{with}. Make a smaller bin."));
             }
-            Ok((o.name.clone(), bin_commands(&o)))
+            Ok((o.name.clone(), parametric_height(&o, bin_commands(&o))))
         }
         "baseplate" => {
             let o = parse_baseplate(params)?;
@@ -678,6 +759,76 @@ mod tests {
         assert_eq!(a, z);
     }
 
+    /// The value of a number, or of a `{Height_units} * s mm + a mm` expression at `units`.
+    fn height_at(v: &Value, units: f64) -> f64 {
+        if let Some(n) = v.as_f64() {
+            return n;
+        }
+        let s = v.as_str().unwrap();
+        let w: Vec<&str> = s.split_whitespace().collect();
+        assert_eq!((w[0], w[1], w[3], w[6]), ("{Height_units}", "*", "mm", "mm"), "{s}");
+        let a: f64 = w[5].parse().unwrap();
+        units * w[2].parse::<f64>().unwrap() + if w[4] == "-" { -a } else { a }
+    }
+
+    fn eval_height(v: &Value, units: f64) -> Value {
+        match v {
+            Value::String(s) if s.starts_with("{Height_units}") => json!(height_at(v, units)),
+            Value::Array(x) => Value::Array(x.iter().map(|e| eval_height(e, units)).collect()),
+            Value::Object(x) => Value::Object(x.iter().map(|(k, e)| (k.clone(), eval_height(e, units))).collect()),
+            _ => v.clone(),
+        }
+    }
+
+    fn close(a: &Value, b: &Value) -> bool {
+        match (a, b) {
+            (Value::Number(x), Value::Number(y)) => (x.as_f64().unwrap() - y.as_f64().unwrap()).abs() < 1e-3,
+            (Value::Array(x), Value::Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(a, b)| close(a, b)),
+            (Value::Object(x), Value::Object(y)) => x.len() == y.len() && x.iter().all(|(k, a)| y.get(k).is_some_and(|b| close(a, b))),
+            _ => a == b,
+        }
+    }
+
+    fn first_diff(a: &Value, b: &Value, at: String) -> Option<String> {
+        match (a, b) {
+            (Value::Array(x), Value::Array(y)) if x.len() == y.len() => x.iter().zip(y).enumerate().find_map(|(i, (a, b))| first_diff(a, b, format!("{at}/{i}"))),
+            (Value::Object(x), Value::Object(y)) if x.len() == y.len() => x.iter().find_map(|(k, a)| y.get(k).and_then(|b| first_diff(a, b, format!("{at}/{k}")))),
+            _ if close(a, b) => None,
+            _ => Some(format!("{at}: {a} vs {b}")),
+        }
+    }
+
+    #[test]
+    fn height_is_a_parameter() {
+        // a bin planned 3 units high, with its height set to 7 in Parameters, is the 7-unit bin
+        for extra in [json!({}), json!({"stacking_lip": false}), json!({"dividers_x": 2, "dividers_y": 1, "holes_magnet": true}),
+                      json!({"inside": "Solid (for custom cutouts)", "inside_fill_height": 12}),
+            json!({"dividers_y": 1, "inside_scoop": 10, "inside_label_text": "M3; Nuts", "stacking_lip": false}),
+            json!({"inside_label_text": "M3x10", "inside_label_text_style": "Flush (inlaid)"})] {
+            let mut p = json!({"width": 2, "height": 3, "title": "B"});
+            let mut q = json!({"width": 2, "height": 7, "title": "B"});
+            for (k, v) in extra.as_object().unwrap() {
+                p[k] = v.clone();
+                q[k] = v.clone();
+            }
+            let (_, c) = plan("bin", &p).unwrap();
+            assert_eq!(c[0]["params"]["name"], "Height_units");
+            assert_eq!(c[0]["params"]["expression"], "3");
+            let at7 = eval_height(&json!(c[1..]), 7.0);
+            // scoops and label tabs keep the size they had at 3 units
+            let seven = json!(bin_commands(&BinOptions { sized_units: 3, ..parse_bin(&q).unwrap() }));
+            assert!(close(&at7, &seven), "{extra}: {}", first_diff(&at7, &seven, String::new()).unwrap_or_default());
+            assert!(c.iter().any(|v| v.to_string().contains("{Height_units}")));
+        }
+        // the runner puts the parameter's name in the design into the expressions
+        let (_, c) = plan("bin", &json!({})).unwrap();
+        let mut run = Runner::default();
+        run.name_params(&planned_params(&c), &["Height_units".into()]);
+        let ext = c.iter().find(|v| v["command"] == "solid.extrude").unwrap();
+        assert!(run.prepare(ext).1["distance"].as_str().unwrap().starts_with("Bin2_Height_units * 7 mm"));
+        assert_eq!(run.prepare(&c[0]).1["name"], "Bin2_Height_units");
+    }
+
     #[test]
     fn label_text() {
         // text adds the tab; one label per compartment, back row first
@@ -707,13 +858,13 @@ mod tests {
         // labels are text parameters, named so they don't clash with ones already in the design
         let (_, c) = plan("bin", &json!({"width": 2, "dividers_x": 1, "inside_label_text": "M3; M4", "inside_label_text_font": "DejaVu Sans"})).unwrap();
         let planned = planned_params(&c);
-        assert_eq!(planned, vec!["Label_1", "Label_2"]);
+        assert_eq!(planned, vec!["Height_units", "Label_1", "Label_2"]);
         let mut run = Runner::default();
         run.name_params(&planned, &["Label_2".into(), "Width".into()]);
         let text = c.iter().find(|v| v["command"] == "sketch.text").unwrap();
         let (_, p) = run.prepare(text);
         assert_eq!((p["text_expression"].as_str(), p["font"].as_str()), (Some("Bin2_Label_1"), Some("DejaVu Sans")));
-        let add = c.iter().find(|v| v["command"] == "parameters.add").unwrap();
+        let add = c.iter().find(|v| v["command"] == "parameters.add" && v["params"]["name"] == "Label_1").unwrap();
         assert_eq!(run.prepare(add).1["name"], "Bin2_Label_1");
         run.name_params(&planned, &[]);
         assert_eq!(run.prepare(add).1["name"], "Label_1");
@@ -772,7 +923,7 @@ mod tests {
         let (_, c) = plan("bin", &json!({"inside": solid, "height": 6, "inside_fill_height": 20})).unwrap();
         let cav = c.iter().find(|v| v["command"] == "solid.extrude" && v["params"]["sketch"].as_str().unwrap().ends_with("Cavity")).unwrap();
         let top = bin_inside_top(6, true);
-        assert!((cav["params"]["distance"].as_f64().unwrap() - (top - 20.0)).abs() < 1e-6);
+        assert!((height_at(&cav["params"]["distance"], 6.0) - (top - 20.0)).abs() < 1e-6);
         assert!(c.iter().any(|v| v["params"]["sketch"].as_str().map_or(false, |s| s.ends_with("Support1"))));
         assert!(!c.iter().any(|v| v["command"] == "solid.box"));
         // out of range

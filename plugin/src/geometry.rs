@@ -45,6 +45,9 @@ pub struct BinOptions {
     /// Cell size in mm along X and Y: PITCH (full grid), HALF_PITCH, or a custom size.
     pub pitch: [f64; 2],
     pub units: u32,
+    /// The height (units) that scoop and label tab sizes are worked out for: the bin's own. A
+    /// bin whose height then changes in Parameters keeps them as they were.
+    pub sized_units: u32,
     pub magnets: bool,
     pub screws: bool,
     pub div_x: u32,
@@ -115,9 +118,9 @@ pub fn label_areas(o: &BinOptions) -> Vec<(f64, f64, f64, f64)> {
     let (x0, y0) = (o.origin[0] + GAP / 2.0 + WALL, o.origin[1] + GAP / 2.0 + WALL);
     let rows = o.div_y + 1;
     let cols = o.div_x + 1;
-    let z = bin_inside_top(o.units, o.lip);
+    let sized = bin_inside_top(o.sized_units, o.lip);
     let depth = id / rows as f64 - if rows > 1 { DIVIDER / 2.0 } else { 0.0 };
-    let label = LABEL_W.min(depth / 2.0).min((z - FLOOR_Z) / 2.0);
+    let label = LABEL_W.min(depth / 2.0).min((sized - FLOOR_Z) / 2.0);
     let mut v = Vec::new();
     for k in (0..rows).rev() {
         let hi = y0 + id * (k + 1) as f64 / rows as f64 - if k + 1 < rows { DIVIDER / 2.0 } else { 0.0 };
@@ -369,9 +372,10 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
         };
         let depth = row(0).1 - row(0).0;
         let e = 0.01; // reach a little into the wall and floor, so the shapes join solidly
-        let label = if o.label { LABEL_W.min(depth / 2.0).min((z - FLOOR_Z) / 2.0) } else { 0.0 };
+        let sized = bin_inside_top(o.sized_units, o.lip);
+        let label = if o.label { LABEL_W.min(depth / 2.0).min((sized - FLOOR_Z) / 2.0) } else { 0.0 };
         let mut profiles = Vec::new();
-        let r = o.scoop.min(depth - label - 1.0).min(z - FLOOR_Z);
+        let r = o.scoop.min(depth - label - 1.0).min(sized - FLOOR_Z);
         if r > 0.5 {
             for k in 0..rows {
                 let yf = row(k).0;
@@ -609,7 +613,7 @@ mod tests {
     use super::*;
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
-        BinOptions { nx, ny, pitch: [PITCH; 2], units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, fill: 0.0, scoop: 0.0, label: false,
+        BinOptions { nx, ny, pitch: [PITCH; 2], units, sized_units: units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, fill: 0.0, scoop: 0.0, label: false,
             label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(),
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
