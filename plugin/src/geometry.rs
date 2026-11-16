@@ -93,8 +93,10 @@ pub struct BaseplateOptions {
     /// Frame only: the pockets go right through (no floor, so no magnet holes).
     pub open: bool,
     pub magnets: bool,
-    /// Solid filler beside the pockets: left, right, front, back (mm).
+    /// Filler beside the pockets: left, right, front, back (mm).
     pub filler: [f64; 4],
+    /// Half cells (21 mm pockets) in the filler where they fit, the rest solid.
+    pub half_cells: bool,
     pub origin: [f64; 2],
     pub name: String,
 }
@@ -539,10 +541,17 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
 }
 
 pub fn baseplate_commands(o: &BaseplateOptions) -> Vec<Value> {
+    let mut out = Vec::new();
+    crate::plate::piece_commands(&mut out, &baseplate_piece(o));
+    out
+}
+
+/// The baseplate as one piece.
+pub fn baseplate_piece(o: &BaseplateOptions) -> crate::plate::Piece {
     let magnets = o.magnets && !o.open;
     // the plate's corner (filler included) stays at the origin
     let corner = [o.origin[0] + o.filler[0], o.origin[1] + o.filler[2]];
-    let piece = crate::plate::Piece {
+    crate::plate::Piece {
         name: o.name.clone(),
         cells: Block { corner, nx: o.nx, ny: o.ny, pitch: o.pitch },
         h: crate::plate::plate_height(o.open, magnets),
@@ -550,14 +559,12 @@ pub fn baseplate_commands(o: &BaseplateOptions) -> Vec<Value> {
         magnets,
         grid_origin: corner,
         filler: o.filler,
+        half_cells: o.half_cells,
         round: [true; 4],
         tabs: [false; 2],
         sockets: [false; 2],
         make_cell: true,
-    };
-    let mut out = Vec::new();
-    crate::plate::piece_commands(&mut out, &piece);
-    out
+    }
 }
 
 /// The commands with every `@pattern` written out as copies of the shapes it repeats: what
@@ -736,7 +743,7 @@ mod tests {
         assert_eq!(circles(&c), vec![(8.0, 12.5), (32.0, 12.5)]);
         // outside 39.5 x 24.5, feet the same at the top
         assert!(c.iter().any(|v| v["command"] == "sketch.rectangle.rounded" && v["params"]["p1"] == json!([39.75, 24.75])));
-        let p = BaseplateOptions { nx: 1, ny: 1, pitch: [40.0, 25.0], open: false, magnets: true, filler: [0.0; 4], origin: [0.0, 0.0], name: "Plate".into() };
+        let p = BaseplateOptions { nx: 1, ny: 1, pitch: [40.0, 25.0], open: false, magnets: true, filler: [0.0; 4], half_cells: false, origin: [0.0, 0.0], name: "Plate".into() };
         let pc = baseplate_commands(&p);
         let magnets = |c: &[Value]| -> Vec<Value> { c.iter().filter(|v| v["params"]["diameter"] == json!(MAGNET_D)).cloned().collect() };
         assert_eq!(circles(&magnets(&pc)), circles(&c));
@@ -748,7 +755,7 @@ mod tests {
 
     #[test]
     fn baseplate_is_one_cell_repeated_with_rounded_corners() {
-        let c = baseplate_commands(&BaseplateOptions { nx: 3, ny: 2, pitch: [PITCH; 2], open: false, magnets: false, filler: [0.0; 4], origin: [0.0, 0.0], name: "Plate".into() });
+        let c = baseplate_commands(&BaseplateOptions { nx: 3, ny: 2, pitch: [PITCH; 2], open: false, magnets: false, filler: [0.0; 4], half_cells: false, origin: [0.0, 0.0], name: "Plate".into() });
         let pockets = c.iter().filter(|v| v["command"] == "sketch.rectangle.rounded" && v["params"]["radius"] == json!(3.95)).count();
         assert_eq!(pockets, 1);
         // a row of 3, then 2 rows
@@ -771,7 +778,7 @@ mod tests {
         o.div_x = 10;
         o.div_y = 10;
         assert!(bin_commands(&o).len() < 100);
-        let p = BaseplateOptions { nx: 24, ny: 24, pitch: [HALF_PITCH; 2], open: false, magnets: true, filler: [0.0; 4], origin: [0.0, 0.0], name: "P".into() };
+        let p = BaseplateOptions { nx: 24, ny: 24, pitch: [HALF_PITCH; 2], open: false, magnets: true, filler: [0.0; 4], half_cells: false, origin: [0.0, 0.0], name: "P".into() };
         assert!(baseplate_commands(&p).len() < 100);
     }
 }

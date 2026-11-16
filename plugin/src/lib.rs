@@ -299,6 +299,7 @@ pub fn parse_baseplate(params: &Value) -> Result<BaseplateOptions, String> {
             get_mm(p, "filler_front", 0.0, 0.0, MAX_FILLER)?,
             get_mm(p, "filler_back", 0.0, 0.0, MAX_FILLER)?,
         ],
+        half_cells: get_leftover(p)?,
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity{half} baseplate{frame} {nx}x{ny}"))?,
     })
@@ -319,13 +320,27 @@ const MAX_DRAWER: f64 = 1000.0;
 /// with magnet holes: 15 s, 8 x 8 with them: over 30 s). These keep a run within the limit.
 const MAX_CELLS_RUN: u32 = 100;
 const MAX_CELLS_RUN_MAGNETS: u32 = 42;
+/// Half cells in the filler add to a run's time, in a drawer more (in the desktop app under
+/// xvfb: a 4 x 4 plate with magnet holes and a ring of 20 half cells takes 14 s, 5 x 5 with 24
+/// of them 17 s, 6 x 6 without magnet holes and 28 of them 19 s; drawers of 400 x 340 and
+/// 440 x 360, 26 s and 29 s with 8 and 10, 2 to 3 s more than without): about this many fit in
+/// a run with nothing else.
+const MAX_HALF_CELLS_RUN: u32 = 70;
+const MAX_HALF_CELLS_RUN_DRAWER: u32 = 50;
 
-fn check_time(cells: u32, magnets: bool, what: &str) -> Result<(), String> {
+fn check_time(cells: u32, (half, max_half): (u32, u32), magnets: bool, what: &str) -> Result<(), String> {
     let max = if magnets { MAX_CELLS_RUN_MAGNETS } else { MAX_CELLS_RUN };
-    if cells > max {
+    if half == 0 && cells > max {
         let with = if magnets { " with magnet holes" } else { "" };
         return Err(format!(
             "{cells} cells is too many for one run: SolidCraft gives a plugin 30 seconds, which is about {max} cells{with}. {what}"
+        ));
+    }
+    if half > 0 && cells as f64 / max as f64 + half as f64 / max_half as f64 > 1.0 {
+        let with = if magnets { " with magnet holes" } else { "" };
+        return Err(format!(
+            "{cells} cells{with} and {half} half cells is too much for one run: SolidCraft gives a plugin 30 seconds, and half \
+             cells take longer than cells. Set Leftover space to Solid, or: {what}"
         ));
     }
     Ok(())
@@ -357,6 +372,16 @@ fn get_filler(p: &Map<String, Value>, key: &str, low: &str, high: &str) -> Resul
     }
 }
 
+/// The space beside the cells: half cells where they fit (the default), or all solid.
+fn get_leftover(p: &Map<String, Value>) -> Result<bool, String> {
+    match p.get("leftover") {
+        None | Some(Value::Null) => Ok(true),
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("half") => Ok(true),
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("solid") => Ok(false),
+        _ => Err("leftover must be \"Half cells\" or \"Solid\"".into()),
+    }
+}
+
 pub fn parse_drawer(params: &Value) -> Result<DrawerOptions, String> {
     let empty = Map::new();
     let p = params.as_object().unwrap_or(&empty);
@@ -380,6 +405,7 @@ pub fn parse_drawer(params: &Value) -> Result<DrawerOptions, String> {
         bed,
         pitch,
         filler: [get_filler(p, "filler_x", "left", "right")?, get_filler(p, "filler_y", "front", "back")?],
+        half_cells: get_leftover(p)?,
         open,
         magnets,
         origin: get_origin(p)?,
@@ -397,6 +423,9 @@ pub fn parse_drawer(params: &Value) -> Result<DrawerOptions, String> {
 pub struct Runner {
     drawn: Vec<Value>,
     created: Vec<Value>,
+    /// The copies of the last pattern marked `"@aside": true`, as `@aside`: patterns that must
+    /// not change what `@created` and `@last` are.
+    aside: Vec<Value>,
     bodies: std::collections::HashMap<String, String>,
     sketches: std::collections::HashMap<String, Value>,
     /// Text parameter names the plan uses, and the names they get in the design.
@@ -510,6 +539,9 @@ impl Runner {
             return ("sketch.pattern.rectangular".into(), pattern_args(&c["params"], &self.drawn));
         }
         let mut p = c["params"].clone();
+        if let Some(o) = p.as_object_mut() {
+            o.remove("@aside");
+        }
         let body = |v: &str| self.bodies.get(v).cloned().unwrap_or_else(|| v.to_string());
         for key in ["targets", "bodies", "tools"] {
             if let Some(Value::Array(list)) = p.get(key) {
@@ -517,6 +549,7 @@ impl Runner {
                 for v in list {
                     match v.as_str() {
                         Some("@created") => out.extend(self.created.iter().cloned()),
+                        Some("@aside") => out.extend(self.aside.iter().cloned()),
                         Some("@last") => out.extend(self.created.last().cloned()),
                         Some(s) => out.push(json!(body(s))),
                         None => out.push(v.clone()),
@@ -526,8 +559,10 @@ impl Runner {
             }
         }
         for key in ["target", "body"] {
-            if let Some(s) = p.get(key).and_then(|v| v.as_str()) {
-                p[key] = json!(body(s));
+            match p.get(key).and_then(|v| v.as_str()) {
+                Some("@last") => p[key] = self.created.last().cloned().unwrap_or(Value::Null),
+                Some(s) => p[key] = json!(body(s)),
+                None => {}
             }
         }
         // `{Height_units}` in an expression: the parameter's name in the design
@@ -579,7 +614,11 @@ impl Runner {
         if let Some(Value::Array(made)) = reply.get("created_bodies") {
             // `@created` / `@last`: the copies the last body pattern made
             if name == "solid.pattern.rectangular" {
-                self.created = made.clone();
+                if c["params"]["@aside"] == json!(true) {
+                    self.aside = made.clone();
+                } else {
+                    self.created = made.clone();
+                }
             }
             // the body this command asked to make, by the name SolidCraft gave it
             if let (Some(asked), Some(Value::String(got))) = (c["params"]["body_name"].as_str(), made.first()) {
@@ -632,7 +671,8 @@ pub fn plan(entry: &str, params: &Value) -> Result<(String, Vec<Value>), String>
         }
         "baseplate" => {
             let o = parse_baseplate(params)?;
-            check_time(o.nx * o.ny, o.magnets && !o.open,
+            let half = plate::half_cell_count(&geometry::baseplate_piece(&o));
+            check_time(o.nx * o.ny, (half, MAX_HALF_CELLS_RUN), o.magnets && !o.open,
                 "Use Gridfinity drawer baseplate, which splits it into pieces and can build them one at a time.")?;
             Ok((o.name.clone(), baseplate_commands(&o)))
         }
@@ -641,7 +681,8 @@ pub fn plan(entry: &str, params: &Value) -> Result<(String, Vec<Value>), String>
             let (pl, c) = drawer_commands(&o)?;
             let count = pl.axes[0].pieces.len() * pl.axes[1].pieces.len();
             let built = drawer::built_cells(&o, &pl);
-            check_time(built, o.magnets && !o.open, &if o.piece == 0 {
+            let half = drawer::built_half_cells(&o, &pl);
+            check_time(built, (half, MAX_HALF_CELLS_RUN_DRAWER), o.magnets && !o.open, &if o.piece == 0 {
                 format!("This drawer is {count} pieces: set Piece to 1, 2, ... {count} and run once for each.")
             } else {
                 "Use a smaller printer size, so the pieces get smaller.".to_string()
@@ -789,6 +830,49 @@ mod tests {
         let mut one = d.clone();
         one["piece"] = json!(1);
         assert!(plan("drawer", &one).is_ok());
+    }
+
+    #[test]
+    fn half_cells_in_the_filler() {
+        let p = json!({"width": 2, "depth": 2, "filler_left": 30, "filler_front": 21});
+        let (_, cmds) = plan("baseplate", &p).unwrap();
+        let sketches: Vec<_> = cmds.iter().filter(|c| c["command"] == "sketch.create")
+            .filter_map(|c| c["params"]["name"].as_str()).filter(|n| n.contains("Half cell")).collect();
+        // three sizes: 21 x 42 beside the cells, 42 x 21 in front, 21 x 21 in the corner
+        assert_eq!(sketches.len(), 9, "{sketches:?}");
+        let first = |size: &str| cmds.iter().skip_while(|c| c["params"]["name"] != format!("Gridfinity baseplate 2x2 Half cell {size} 1"))
+            .nth(1).unwrap()["params"]["p0"].clone();
+        assert_eq!(first("21x42"), json!([30.0 - 21.0 + 0.05, 21.0 + 0.05]));
+        assert_eq!(first("21x21"), json!([30.0 - 21.0 + 0.05, 0.05]));
+        assert_eq!(first("42x21"), json!([30.0 + 0.05, 0.05]));
+        // each used once, so none is copied
+        assert!(!cmds.iter().any(|c| c["command"] == "solid.move"));
+        assert_eq!(plate::half_cell_count(&geometry::baseplate_piece(&parse_baseplate(&p).unwrap())), 5);
+        let mut solid = p.clone();
+        solid["leftover"] = json!("Solid");
+        let (_, cmds) = plan("baseplate", &solid).unwrap();
+        assert!(!cmds.iter().any(|c| c["params"]["name"].as_str().is_some_and(|n| n.contains("Half cells"))));
+        assert!(parse_baseplate(&json!({"leftover": "quarter"})).is_err());
+        // half cells count towards the time a run takes
+        let ring = |w: u32, magnets: bool| json!({"width": w, "depth": w, "holes_magnet": magnets,
+            "filler_left": 21, "filler_right": 21, "filler_front": 21, "filler_back": 21});
+        assert_eq!(plate::half_cell_count(&geometry::baseplate_piece(&parse_baseplate(&ring(4, true)).unwrap())), 20);
+        assert!(plan("baseplate", &ring(4, true)).is_ok());
+        assert!(plan("baseplate", &ring(5, true)).is_ok());
+        assert!(plan("baseplate", &ring(6, true)).unwrap_err().contains("Leftover space to Solid"));
+        assert!(plan("baseplate", &ring(6, false)).is_ok());
+        assert!(plan("baseplate", &ring(8, false)).is_err());
+        assert!(plan("drawer", &json!({"drawer_width": 400, "drawer_depth": 300})).is_ok());
+        assert!(plan("drawer", &json!({"drawer_width": 400, "drawer_depth": 340})).is_ok());
+        let e = plan("drawer", &json!({"drawer_width": 450, "drawer_depth": 380})).unwrap_err();
+        assert!(e.contains("9 half cells") && e.contains("Leftover space to Solid") && e.contains("set Piece to 1, 2"), "{e}");
+        assert!(plan("drawer", &json!({"drawer_width": 450, "drawer_depth": 380, "leftover": "Solid"})).is_ok());
+        // a custom grid keeps its filler solid
+        let mut custom = p.clone();
+        custom["grid"] = json!("Custom");
+        custom["custom_size_x"] = json!(40);
+        let (_, cmds) = plan("baseplate", &custom).unwrap();
+        assert!(!cmds.iter().any(|c| c["params"]["name"].as_str().is_some_and(|n| n.contains("Half cells"))));
     }
 
     #[test]

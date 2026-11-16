@@ -48,12 +48,17 @@ one undo step, editable afterwards, and they keep working without the plugin.
   bottom of the bin) to stop the fill lower: above it the bin is hollow with walls and lip, so a bin
   stacked on top clears what sits in your cutouts.
 - **baseplate**: width × depth pockets with the Gridfinity profile, full, half or custom grid, a solid
-  bottom (optional magnet holes) or an **open frame** (no bottom). Add solid **filler** on any side
+  bottom (optional magnet holes) or an **open frame** (no bottom). Add **filler** on any side
   (`filler_left`, `filler_right`, `filler_front`, `filler_back`, in mm) to fill out a drawer
-  without the drawer settings.
+  without the drawer settings. Where 21 mm or more of filler fits, it gets **half cells** next to the
+  cells: pockets half a cell wide and as long as the cells (21 × 42 mm beside them, 42 × 21 mm in
+  front and behind, 21 × 21 mm in the corners), for half-width bins and half-grid 1 × 2 bins. Only
+  the rest is solid; set **Leftover space** (`leftover`) to "Solid" for solid filler only. Half cells are made
+  on the 42 and 21 mm grids, not on a custom one, and have no magnet holes.
 - **drawer baseplate**: enter the inside size of a drawer and the size of your printer's bed. It
-  fits as many cells as the drawer takes, fills the space left over with solid filler (split evenly
-  or all on one side), and cuts the plate along the grid lines into pieces that fit the printer, as
+  fits as many cells as the drawer takes, fills the space left over with filler (split evenly or
+  all on one side): a row of half cells where 21 mm or more is left over (on the side you choose,
+  for Even on the right and at the back), the rest solid. Then it cuts the plate along the grid lines into pieces that fit the printer, as
   evenly as it can. The pieces lock together with dovetail tabs (1.8 mm, 0.05 mm clearance), which
   sit low in the wall between pockets so they don't show; the piece with the sockets goes on from
   above. Big drawers are built one piece at a time (`piece`), see *Limits* below.
@@ -90,13 +95,17 @@ one undo step, editable afterwards, and they keep working without the plugin.
 |---|---|
 | ![Fill height](docs/images/bin-fill-height.png) | ![Section](docs/images/bin-fill-height-section.png) |
 
-| 4×3 baseplate with filler: 12 mm left and right, 25 mm at the back | The baseplate form with the filler fields |
+| 4×3 baseplate with solid filler (Leftover space: Solid): 12 mm left and right, 25 mm at the back | The baseplate form with the filler fields |
 |---|---|
 | ![Baseplate with filler](docs/images/baseplate-filler.png) | ![Filler fields](docs/images/dialog-filler.png) |
 
-| A 400 × 300 mm drawer on a 256 mm printer: four pieces | Dovetails between two pieces, from above and below |
+| A 400 × 300 mm drawer on a 256 mm printer: four pieces, half cells along the right edge | Dovetails between two pieces, from above and below |
 |---|---|
 | ![Drawer baseplate](docs/images/drawer-400x300.png) | ![Tabs](docs/images/drawer-tabs.png) ![Sockets](docs/images/drawer-tabs-under.png) |
+
+| 4×3 baseplate with magnet holes, 25 mm filler on the left and 30 mm in front: half cells |
+|---|
+| ![Half cells in the filler](docs/images/baseplate-half-cells.png) |
 
 Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-openscad
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
@@ -141,7 +150,9 @@ SolidCraft gives a plugin run 256 commands and 30 seconds. The plugin makes one 
 it, so the number of commands stays small at any size; the time goes on joining the cells, about
 0.15 s a cell on a 4-core desktop, more with magnet or screw holes. One run builds up to 100 cells
 (a 10 × 10 baseplate in about 16 s), 42 with magnet holes, fewer for bins with screw holes; past
-that the plugin says so before it starts. For a bigger baseplate use the drawer baseplate and
+that the plugin says so before it starts. Half cells in the filler take longer than cells: a 4 × 4
+baseplate with magnet holes and a ring of half cells around it takes about 14 s, and the plugin
+counts them in when it decides; set Leftover space to Solid to leave them out. For a bigger baseplate use the drawer baseplate and
 build it a piece at a time: set **Piece** to 1, 2, … (numbered along X, then Y) and run once for
 each. Pieces built separately land where they would have with the others.
 
@@ -168,8 +179,8 @@ run an entry with that hash ([examples/](examples/)).
 | Entry | Parameters (default) |
 |---|---|
 | `bin` | `grid` "42 mm (full)" / "21 mm (half)" / "Custom (sizes below)", `custom_size_x`, `custom_size_y` 15–100 mm (42, Custom only), `width` up to 504 mm and 24 cells (1), `depth` (1), `height` 2–20 units (3), `inside` "Hollow" / "Solid (for custom cutouts)", `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `inside_scoop` 0–40 mm (0), `inside_label_tab` (false), `inside_label_text` (labels separated by `;`), `inside_label_text_size` 0–20 mm (0: fit), `inside_label_text_height` 0.1–3 mm (0.4), `inside_label_text_style` "Raised" / "Flush (inlaid)", `inside_label_text_font` (installed font, empty: built-in), `inside_fill_height` mm (0: to the top; solid bins, from 6 mm to 1 mm under the inside top), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
-| `baseplate` | `grid`, `custom_size_x`, `custom_size_y`, `width` (3), `depth` (3), `bottom` "Solid" / "Open (frame only)", `holes_magnet` (false, solid only), `filler_left`, `filler_right`, `filler_front`, `filler_back` 0–200 mm (0), `position_x`, `position_y` mm (0, the corner of the plate with its filler), `title` |
-| `drawer` | `drawer_width`, `drawer_depth` 15–1000 mm (300), `printer_x`, `printer_y` 50–1000 mm (256), `grid`, `custom_size_x`, `custom_size_y`, `bottom`, `holes_magnet`, `filler_x` "Even (both sides)" / "Left" / "Right", `filler_y` "Even (both sides)" / "Front" / "Back", `piece` (0: all), `position_x`, `position_y` mm (0), `title` |
+| `baseplate` | `grid`, `custom_size_x`, `custom_size_y`, `width` (3), `depth` (3), `bottom` "Solid" / "Open (frame only)", `holes_magnet` (false, solid only), `filler_left`, `filler_right`, `filler_front`, `filler_back` 0–200 mm (0), `leftover` "Half cells" / "Solid", `position_x`, `position_y` mm (0, the corner of the plate with its filler), `title` |
+| `drawer` | `drawer_width`, `drawer_depth` 15–1000 mm (300), `printer_x`, `printer_y` 50–1000 mm (256), `grid`, `custom_size_x`, `custom_size_y`, `bottom`, `holes_magnet`, `filler_x` "Even (both sides)" / "Left" / "Right", `filler_y` "Even (both sides)" / "Front" / "Back", `leftover` "Half cells" / "Solid", `piece` (0: all), `position_x`, `position_y` mm (0), `title` |
 
 Scripts may also say `"full"` / `"half"` / `"custom"` / `"open"` and use the older names `magnets`, `screws`, `name` and `origin: [x, y]`.
 

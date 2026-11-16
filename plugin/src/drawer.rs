@@ -5,8 +5,8 @@
 //! (see plate.rs), with filler on the drawer's outside and a tab or socket at every cell along
 //! each seam. The first cell is made once and copied to the start of every other piece.
 
-use crate::geometry::{cmd, r4, Block};
-use crate::plate::{first_cell, piece_commands, plate_height, Piece, TAB_DEPTH};
+use crate::geometry::{cmd, r4, Block, HALF_PITCH, PITCH};
+use crate::plate::{first_cell, piece_commands, piece_commands_seeded, plate_height, Piece, Seeds, TAB_DEPTH};
 use serde_json::{json, Value};
 
 /// Space between the pieces as they are laid out in the design (mm).
@@ -30,6 +30,8 @@ pub struct DrawerOptions {
     pub bed: [f64; 2],
     pub pitch: [f64; 2],
     pub filler: [Filler; 2],
+    /// Half cells in the leftover space where they fit.
+    pub half_cells: bool,
     pub open: bool,
     pub magnets: bool,
     pub origin: [f64; 2],
@@ -69,14 +71,17 @@ impl AxisPlan {
 }
 
 /// Split one axis: the fewest pieces that fit `bed`, then the most even sizes. Errors say what
-/// to change.
-pub fn plan_axis(size: f64, pitch: f64, bed: f64, filler: Filler, axis: &str) -> Result<AxisPlan, String> {
+/// to change. With `half` and room for a half cell (21 mm), the half cells go on one side: the
+/// one `filler` names, or for `Even` the high side, with what is left over split evenly.
+pub fn plan_axis(size: f64, pitch: f64, bed: f64, filler: Filler, half: bool, axis: &str) -> Result<AxisPlan, String> {
     let n = ((size + 1e-9) / pitch).floor() as u32;
     if n == 0 {
         return Err(format!("the drawer's {axis} ({size} mm) is smaller than one cell ({pitch} mm)"));
     }
     let rest = size - n as f64 * pitch;
+    let half = half && pitch == PITCH && rest + 1e-6 >= HALF_PITCH;
     let (lo, hi) = match filler {
+        Filler::Even if half => ((rest - HALF_PITCH) / 2.0, (rest - HALF_PITCH) / 2.0 + HALF_PITCH),
         Filler::Even => (rest / 2.0, rest / 2.0),
         Filler::Low => (rest, 0.0),
         Filler::High => (0.0, rest),
@@ -145,8 +150,8 @@ pub struct DrawerPlan {
 pub fn plan(o: &DrawerOptions) -> Result<DrawerPlan, String> {
     Ok(DrawerPlan {
         axes: [
-            plan_axis(o.drawer[0], o.pitch[0], o.bed[0], o.filler[0], "width")?,
-            plan_axis(o.drawer[1], o.pitch[1], o.bed[1], o.filler[1], "depth")?,
+            plan_axis(o.drawer[0], o.pitch[0], o.bed[0], o.filler[0], o.half_cells, "width")?,
+            plan_axis(o.drawer[1], o.pitch[1], o.bed[1], o.filler[1], o.half_cells, "depth")?,
         ],
     })
 }
@@ -189,6 +194,7 @@ pub fn pieces(o: &DrawerOptions, pl: &DrawerPlan) -> Vec<Piece> {
                     if front { ay.filler_low } else { 0.0 },
                     if back { ay.filler_high } else { 0.0 },
                 ],
+                half_cells: o.half_cells,
                 round: [left && front, right && front, right && back, left && back],
                 tabs: [!right, !back],
                 sockets: [!left, !front],
@@ -197,6 +203,15 @@ pub fn pieces(o: &DrawerOptions, pl: &DrawerPlan) -> Vec<Piece> {
         }
     }
     v
+}
+
+/// Half cells the run builds: all of the drawer's, or one piece's.
+pub fn built_half_cells(o: &DrawerOptions, pl: &DrawerPlan) -> u32 {
+    let all = pieces(o, pl);
+    match o.piece {
+        0 => all.iter().map(crate::plate::half_cell_count).sum(),
+        k => all.get(k as usize - 1).map(crate::plate::half_cell_count).unwrap_or(0),
+    }
 }
 
 /// Cells the run builds: all of the drawer's, or one piece's.
@@ -233,11 +248,29 @@ pub fn drawer_commands(o: &DrawerOptions) -> Result<(DrawerPlan, Vec<Value>), St
         out.push(cmd("solid.move", json!({"bodies": [all[0].name], "copy": true, "body_name": p.name,
             "translate": [r4(c[0] - c0[0]), r4(c[1] - c0[1]), 0.0]})));
     }
+    let mut seeds = Seeds::counting(&o.name);
     for p in &all {
-        piece_commands(&mut out, p);
+        piece_commands_seeded(&mut Vec::new(), p, &mut seeds);
+    }
+    let mut seeds = seeds.ready();
+    for p in &all {
+        piece_commands_seeded(&mut out, p, &mut seeds);
     }
     if out.len() > MAX_CALLS {
         let (kx, ky) = (pl.axes[0].pieces.len(), pl.axes[1].pieces.len());
+        // each piece alone fits in a run when it can be built at all
+        let one = all.iter().map(|p| {
+            let mut v = Vec::new();
+            piece_commands(&mut v, &Piece { make_cell: true, ..p.clone() });
+            v.len()
+        }).max().unwrap_or(0);
+        if one <= MAX_CALLS {
+            let count = kx * ky;
+            return Err(format!(
+                "this drawer is {count} pieces, more than SolidCraft lets one plugin run build: set Piece to 1, 2, ... {count} \
+                 and run once for each"
+            ));
+        }
         return Err(format!(
             "{kx} x {ky} pieces is more than SolidCraft lets one plugin run build; use a bigger printer size, \
              a bigger grid or a smaller drawer"
@@ -250,17 +283,16 @@ pub fn drawer_commands(o: &DrawerOptions) -> Result<(DrawerPlan, Vec<Value>), St
 mod tests {
     use super::*;
     use crate::plate::{dovetail, CLEARANCE};
-    use crate::geometry::PITCH;
     use serde_json::Value;
 
     fn opts(drawer: [f64; 2], bed: [f64; 2]) -> DrawerOptions {
-        DrawerOptions { drawer, bed, pitch: [PITCH; 2], filler: [Filler::Even; 2], open: false, magnets: false,
+        DrawerOptions { drawer, bed, pitch: [PITCH; 2], filler: [Filler::Even; 2], half_cells: false, open: false, magnets: false,
                         origin: [0.0, 0.0], name: "Drawer".into(), piece: 0 }
     }
 
     #[test]
     fn cells_and_filler() {
-        let a = plan_axis(400.0, 42.0, 256.0, Filler::Even, "width").unwrap();
+        let a = plan_axis(400.0, 42.0, 256.0, Filler::Even, false, "width").unwrap();
         assert_eq!(a.cells, 9);
         assert!((a.filler_low - 11.0).abs() < 1e-9 && (a.filler_high - 11.0).abs() < 1e-9);
         // 9 cells in two pieces, as even as the filler allows: 4 + 5 (the 4 has filler and a tab)
@@ -269,24 +301,24 @@ mod tests {
         assert!(a.widths(42.0).iter().all(|&w| w <= 256.0));
         let e = a.edges(42.0);
         assert_eq!((e[0], *e.last().unwrap()), (0.0, 400.0));
-        let low = plan_axis(400.0, 42.0, 256.0, Filler::Low, "width").unwrap();
+        let low = plan_axis(400.0, 42.0, 256.0, Filler::Low, false, "width").unwrap();
         assert_eq!((low.filler_low, low.filler_high), (22.0, 0.0));
     }
 
     #[test]
     fn fits_in_one_piece_when_it_can() {
-        let a = plan_axis(250.0, 42.0, 256.0, Filler::Even, "width").unwrap();
+        let a = plan_axis(250.0, 42.0, 256.0, Filler::Even, false, "width").unwrap();
         assert_eq!(a.pieces, vec![5]);
         // the most even split: 10 cells on a 180 mm bed -> 4 + 3 + 3 or similar, never 4 + 4 + 2
-        let b = plan_axis(420.0, 42.0, 180.0, Filler::Even, "width").unwrap();
+        let b = plan_axis(420.0, 42.0, 180.0, Filler::Even, false, "width").unwrap();
         assert_eq!(b.pieces.len(), 3);
         assert!(b.pieces.iter().max().unwrap() - b.pieces.iter().min().unwrap() <= 1);
     }
 
     #[test]
     fn errors_say_what_is_wrong() {
-        assert!(plan_axis(30.0, 42.0, 256.0, Filler::Even, "width").unwrap_err().contains("smaller than one cell"));
-        assert!(plan_axis(300.0, 42.0, 40.0, Filler::Even, "width").unwrap_err().contains("doesn't fit"));
+        assert!(plan_axis(30.0, 42.0, 256.0, Filler::Even, false, "width").unwrap_err().contains("smaller than one cell"));
+        assert!(plan_axis(300.0, 42.0, 40.0, Filler::Even, false, "width").unwrap_err().contains("doesn't fit"));
     }
 
     #[test]
@@ -341,7 +373,7 @@ mod more_tests {
 
     #[test]
     fn a_big_drawer_stays_under_the_call_limit() {
-        let o = DrawerOptions { drawer: [600.0, 500.0], bed: [256.0, 256.0], pitch: [PITCH; 2], filler: [Filler::Even; 2],
+        let o = DrawerOptions { drawer: [600.0, 500.0], bed: [256.0, 256.0], pitch: [PITCH; 2], filler: [Filler::Even; 2], half_cells: false,
                                 open: false, magnets: true, origin: [0.0, 0.0], name: "D".into(), piece: 0 };
         let (pl, c) = drawer_commands(&o).unwrap();
         assert_eq!((pl.axes[0].cells, pl.axes[1].cells), (14, 11));
@@ -366,8 +398,33 @@ mod more_tests {
     }
 
     #[test]
+    fn half_cells_go_where_the_leftover_space_is() {
+        // 400 mm: 9 cells and 22 mm over, a half cell on the right and 0.5 mm solid on each side
+        let a = plan_axis(400.0, PITCH, 256.0, Filler::Even, true, "width").unwrap();
+        assert!((a.filler_low - 0.5).abs() < 1e-9 && (a.filler_high - 21.5).abs() < 1e-9);
+        let a = plan_axis(400.0, PITCH, 256.0, Filler::Low, true, "width").unwrap();
+        assert_eq!((a.filler_low, a.filler_high), (22.0, 0.0));
+        // too little room: as before
+        let a = plan_axis(390.0, PITCH, 256.0, Filler::Even, true, "width").unwrap();
+        assert_eq!((a.filler_low, a.filler_high), (6.0, 6.0));
+        // the half cells are cut only into the pieces on that side
+        let o = DrawerOptions { drawer: [400.0, 300.0], bed: [256.0, 256.0], pitch: [PITCH; 2], filler: [Filler::Even; 2], half_cells: true,
+                                open: false, magnets: false, origin: [0.0, 0.0], name: "D".into(), piece: 0 };
+        let (_, c) = drawer_commands(&o).unwrap();
+        let named = |end: &str| c.iter().filter(|v| v["command"] == "sketch.create" && v["params"]["name"].as_str().unwrap().contains(end)).count();
+        // 400 x 300: 9 x 7 cells, 22 and 6 mm over: half cells along X only, on the right pieces
+        let (pl, _) = drawer_commands(&o).unwrap();
+        // one half cell made, and moved or copied into each right-hand piece's strip
+        assert_eq!(named("Half cell 21x42 1"), 1);
+        let moves = c.iter().filter(|v| v["command"] == "solid.move" && v["params"]["bodies"][0] == "D Half cell 21x42").count();
+        assert_eq!(moves, pl.axes[1].pieces.len());
+        assert_eq!(named("Half cells front") + named("Half cells back"), 0);
+        assert!(c.len() <= MAX_CALLS, "{} calls", c.len());
+    }
+
+    #[test]
     fn too_many_pieces_is_refused_in_words() {
-        let o = DrawerOptions { drawer: [1000.0, 1000.0], bed: [100.0, 100.0], pitch: [PITCH; 2], filler: [Filler::Even; 2],
+        let o = DrawerOptions { drawer: [1000.0, 1000.0], bed: [100.0, 100.0], pitch: [PITCH; 2], filler: [Filler::Even; 2], half_cells: false,
                                 open: false, magnets: false, origin: [0.0, 0.0], name: "D".into(), piece: 0 };
         assert!(drawer_commands(&o).unwrap_err().contains("pieces"));
     }

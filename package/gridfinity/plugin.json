@@ -251,7 +251,7 @@
       "filler_left": {
        "type": "number",
        "title": "Filler left",
-       "description": "Solid strip on the left (-X) side, to fill out a drawer. 0 = none",
+       "description": "Strip on the left (-X) side, to fill out a drawer: half cells where 21 mm or more fits (see Leftover space), the rest solid. 0 = none",
        "minimum": 0,
        "maximum": 200,
        "default": 0,
@@ -260,7 +260,7 @@
       "filler_right": {
        "type": "number",
        "title": "Filler right",
-       "description": "Solid strip on the right (+X) side, to fill out a drawer. 0 = none",
+       "description": "Strip on the right (+X) side, to fill out a drawer: half cells where 21 mm or more fits (see Leftover space), the rest solid. 0 = none",
        "minimum": 0,
        "maximum": 200,
        "default": 0,
@@ -269,7 +269,7 @@
       "filler_front": {
        "type": "number",
        "title": "Filler front",
-       "description": "Solid strip on the front (-Y) side, to fill out a drawer. 0 = none",
+       "description": "Strip on the front (-Y) side, to fill out a drawer: half cells where 21 mm or more fits (see Leftover space), the rest solid. 0 = none",
        "minimum": 0,
        "maximum": 200,
        "default": 0,
@@ -278,11 +278,21 @@
       "filler_back": {
        "type": "number",
        "title": "Filler back",
-       "description": "Solid strip on the back (+Y) side, to fill out a drawer. 0 = none",
+       "description": "Strip on the back (+Y) side, to fill out a drawer: half cells where 21 mm or more fits (see Leftover space), the rest solid. 0 = none",
        "minimum": 0,
        "maximum": 200,
        "default": 0,
        "unit": "mm"
+      },
+      "leftover": {
+       "type": "string",
+       "title": "Leftover space",
+       "description": "Half cells: pockets half a cell wide and as long as the cells (21 x 42 mm), for half-width bins, where 21 mm or more is left over; the rest solid. Solid: all solid",
+       "enum": [
+        "Half cells",
+        "Solid"
+       ],
+       "default": "Half cells"
       },
       "position_x": {
        "type": "number",
@@ -423,6 +433,16 @@
         "Back"
        ],
        "default": "Even (both sides)"
+      },
+      "leftover": {
+       "type": "string",
+       "title": "Leftover space",
+       "description": "Half cells: a row of pockets half a cell wide and as long as the cells (21 x 42 mm), for half-width bins, where 21 mm or more is left over (on the side Filler names; for Even, right and back); the rest solid. Solid: all solid",
+       "enum": [
+        "Half cells",
+        "Solid"
+       ],
+       "default": "Half cells"
       },
       "grid": {
        "type": "string",

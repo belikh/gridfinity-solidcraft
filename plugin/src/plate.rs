@@ -9,8 +9,8 @@
 //! are the rows joined, once.
 
 use crate::geometry::{
-    block_holes, block_rrects, circle, cmd, extrude, pattern, r4, sketch, Block, Op, MAGNET_D, MAGNET_DEPTH,
-    PLATE_PROFILE, PLATE_R, PLATE_RIM,
+    block_holes, block_rrects, circle, cmd, extrude, pattern, r4, sketch, Block, Op, HALF_PITCH, MAGNET_D, MAGNET_DEPTH,
+    PITCH, PLATE_PROFILE, PLATE_R, PLATE_RIM,
 };
 use serde_json::{json, Value};
 
@@ -70,8 +70,10 @@ pub struct Piece {
     /// Magnet holes, and the corner of the grid they line up with.
     pub magnets: bool,
     pub grid_origin: [f64; 2],
-    /// Solid filler beside the cells: left, right, front, back (mm).
+    /// Filler beside the cells: left, right, front, back (mm).
     pub filler: [f64; 4],
+    /// Half cells in the filler where they fit (see `half_columns`), the rest solid.
+    pub half_cells: bool,
     /// Rounded corners: front left, front right, back right, back left.
     pub round: [bool; 4],
     /// Tabs on the right and back seams, sockets on the left and front ones.
@@ -81,8 +83,78 @@ pub struct Piece {
     pub make_cell: bool,
 }
 
+/// The half cells strips are copied from, one of each size (21 x 42 beside the cells, 42 x 21
+/// in front of and behind them, 21 x 21 in the corners): each made once where it is first used
+/// and moved into its last use (a copy is one command, a made half cell four). A plan is made
+/// twice: first `counting`, to learn how often each is used.
+pub struct Seeds {
+    base: String,
+    counting: bool,
+    list: Vec<SeedCell>,
+}
+
+struct SeedCell {
+    size: [f64; 2],
+    at: Option<[f64; 2]>,
+    /// Uses still to come.
+    left: u32,
+}
+
+impl Seeds {
+    pub fn counting(base: &str) -> Seeds {
+        Seeds { base: base.to_string(), counting: true, list: Vec::new() }
+    }
+
+    /// After the counting pass: ready to make the half cells.
+    pub fn ready(mut self) -> Seeds {
+        self.counting = false;
+        self
+    }
+
+    /// A half cell of `size` at `corner` as body `name` (or the seed itself, at its last use);
+    /// returns the body's name.
+    fn place(&mut self, out: &mut Vec<Value>, p: &Piece, corner: [f64; 2], size: [f64; 2], name: &str) -> String {
+        let i = match self.list.iter().position(|c| c.size == size) {
+            Some(i) => i,
+            None => {
+                self.list.push(SeedCell { size, at: None, left: 0 });
+                self.list.len() - 1
+            }
+        };
+        if self.counting {
+            self.list[i].left += 1;
+            return name.to_string();
+        }
+        let seed = format!("{} Half cell {}x{}", self.base, size[0], size[1]);
+        let cell = &mut self.list[i];
+        let at = *cell.at.get_or_insert_with(|| {
+            out.push(cmd("solid.box", json!({"corner": [r4(corner[0]), r4(corner[1]), 0.0], "length": r4(size[0]),
+                "width": r4(size[1]), "height": r4(p.h), "operation": "new", "body_name": seed})));
+            half_pockets(out, &seed, &seed, p, Block { corner, nx: 1, ny: 1, pitch: size });
+            corner
+        });
+        cell.left = cell.left.saturating_sub(1);
+        let shift = [r4(corner[0] - at[0]), r4(corner[1] - at[1]), 0.0];
+        if cell.left == 0 {
+            if shift != [0.0; 3] {
+                out.push(cmd("solid.move", json!({"bodies": [seed], "translate": shift})));
+            }
+            return seed;
+        }
+        out.push(cmd("solid.move", json!({"bodies": [seed], "copy": true, "body_name": name, "translate": shift})));
+        name.to_string()
+    }
+}
+
 /// Commands for one piece; see the module comment for the order.
 pub fn piece_commands(out: &mut Vec<Value>, p: &Piece) {
+    let mut seeds = Seeds::counting(&p.name);
+    piece_commands_seeded(&mut Vec::new(), p, &mut seeds);
+    piece_commands_seeded(out, p, &mut seeds.ready());
+}
+
+/// `piece_commands`, with half cells copied from `seeds`.
+pub fn piece_commands_seeded(out: &mut Vec<Value>, p: &Piece, seeds: &mut Seeds) {
     let b = p.name.as_str();
     let n = |s: &str| format!("{b} {s}");
     let Block { corner: [x0, y0], nx, ny, pitch: [px, py] } = p.cells;
@@ -100,16 +172,25 @@ pub fn piece_commands(out: &mut Vec<Value>, p: &Piece) {
     }
     // what every row has: filler at its ends, the seams across X
     let x1 = x0 + px * nx as f64;
-    let mut boxes = Vec::new();
-    if fl > 1e-6 {
-        boxes.push([x0 - fl, y0, fl, py]);
+    let k = |f: f64| half_columns(p, f);
+    let (kl, kr, kf, kb) = (k(fl), k(fr), k(ff), k(fb));
+    let hp = HALF_PITCH;
+    // half cells in the side filler sit next to the cells, as long as they are
+    let sides = [
+        (fl, x0 - fl, Block { corner: [x0 - hp * kl as f64, y0], nx: kl, ny: 1, pitch: [hp, py] }, "left"),
+        (fr, x1, Block { corner: [x1, y0], nx: kr, ny: 1, pitch: [hp, py] }, "right"),
+    ];
+    let mut strips = Vec::new();
+    for (f, x, cells, side) in sides {
+        if f > 1e-6 && cells.nx > 0 {
+            strips.push(json!(half_strip(out, p, seeds, [x, y0, f, py], &[cells], &n(&format!("Half cells {side}")))));
+        } else if f > 1e-6 {
+            out.push(cmd("solid.box", json!({"corner": [r4(x), r4(y0), 0.0], "length": r4(f), "width": r4(py), "height": r4(h),
+                "operation": "join", "targets": [b]})));
+        }
     }
-    if fr > 1e-6 {
-        boxes.push([x1, y0, fr, py]);
-    }
-    for [x, y, w, d] in boxes {
-        out.push(cmd("solid.box", json!({"corner": [r4(x), r4(y), 0.0], "length": r4(w), "width": r4(d), "height": r4(h),
-            "operation": "join", "targets": [b]})));
+    if !strips.is_empty() {
+        out.push(cmd("solid.combine", json!({"target": b, "tools": strips, "operation": "join"})));
     }
     let tab_h = tab_height(h);
     let row_c = y0 + py / 2.0;
@@ -130,14 +211,27 @@ pub fn piece_commands(out: &mut Vec<Value>, p: &Piece) {
     };
     let (left, right, front, back) = (x0 - fl, x1 + fr, y0, y0 + py * ny as f64);
     let col_c = x0 + px / 2.0;
-    // front row
-    if ff > 1e-6 {
+    // the half cells along the front and back are as wide as the cells, and square in the
+    // corners under the side ones
+    let along = |y: f64, rows: u32| [
+        Block { corner: [x0 - hp * kl as f64, y], nx: kl, ny: rows, pitch: [hp; 2] },
+        Block { corner: [x0, y], nx, ny: rows, pitch: [px, hp] },
+        Block { corner: [x1, y], nx: kr, ny: rows, pitch: [hp; 2] },
+    ];
+    // Front and back filler with half cells are bodies of their own, joined with the rows at the
+    // end: each change to a row costs SolidCraft a check of it, and those add up.
+    let mut late = Vec::new();
+    let mut front_body = b.to_string();
+    if kf > 0 {
+        front_body = half_strip(out, p, seeds, [left, front - ff, right - left, ff], &along(front - hp * kf as f64, kf), &n("Half cells front"));
+        late.push(json!(front_body));
+    } else if ff > 1e-6 {
         out.push(cmd("solid.box", json!({"corner": [r4(left), r4(front - ff), 0.0], "length": r4(right - left), "width": r4(ff),
             "height": r4(h), "operation": "join", "targets": [b]})));
     }
     let front = front - ff;
     let back = back + fb;
-    corners(out, &n("Corners front"), b, h, &[(p.round[0], [left, front], [1.0, 1.0]), (p.round[1], [right, front], [-1.0, 1.0])]);
+    corners(out, &n("Corners front"), &front_body, h, &[(p.round[0], [left, front], [1.0, 1.0]), (p.round[1], [right, front], [-1.0, 1.0])]);
     if p.sockets[1] {
         let mut v = vec![polygon(&dovetail(1, front, col_c, CLEARANCE))];
         v.extend(pattern(nx, px, 1, 0.0));
@@ -145,11 +239,15 @@ pub fn piece_commands(out: &mut Vec<Value>, p: &Piece) {
         out.push(extrude(&n("Sockets Y"), tab_h + CLEARANCE_TOP, Op::Cut(b), None, ""));
     }
     // back row (the same body when there is one row)
-    if fb > 1e-6 {
+    let mut back_body = last.to_string();
+    if kb > 0 {
+        back_body = half_strip(out, p, seeds, [left, back - fb, right - left, fb], &along(back - fb, kb), &n("Half cells back"));
+        late.push(json!(back_body));
+    } else if fb > 1e-6 {
         out.push(cmd("solid.box", json!({"corner": [r4(left), r4(back - fb), 0.0], "length": r4(right - left), "width": r4(fb),
             "height": r4(h), "operation": "join", "targets": [last]})));
     }
-    corners(out, &n("Corners back"), last, h, &[(p.round[2], [right, back], [-1.0, -1.0]), (p.round[3], [left, back], [1.0, -1.0])]);
+    corners(out, &n("Corners back"), &back_body, h, &[(p.round[2], [right, back], [-1.0, -1.0]), (p.round[3], [left, back], [1.0, -1.0])]);
     if p.tabs[1] {
         let mut v = vec![polygon(&dovetail(1, back, col_c, 0.0))];
         v.extend(pattern(nx, px, 1, 0.0));
@@ -167,7 +265,10 @@ pub fn piece_commands(out: &mut Vec<Value>, p: &Piece) {
     }
     // and only now one plate
     if ny > 1 {
-        out.push(cmd("solid.combine", json!({"target": b, "tools": ["@created"], "operation": "join"})));
+        late.insert(0, json!("@created"));
+    }
+    if !late.is_empty() {
+        out.push(cmd("solid.combine", json!({"target": b, "tools": late, "operation": "join"})));
     }
 }
 
@@ -202,6 +303,92 @@ pub fn first_cell(out: &mut Vec<Value>, p: &Piece) {
         sketch(out, floor, &n("Magnets"), block_holes(one, p.grid_origin, MAGNET_D));
         out.push(extrude(&n("Magnets"), MAGNET_DEPTH, Op::Cut(b), None, "negative"));
     }
+}
+
+/// How many half cells `p` gets in its filler.
+pub fn half_cell_count(p: &Piece) -> u32 {
+    let [fl, fr, ff, fb] = p.filler.map(|f| half_columns(p, f));
+    (fl + fr) * p.cells.ny + (ff + fb) * (p.cells.nx + fl + fr)
+}
+
+/// How many rows of half cells (21 mm) fit in filler `f` beside `p`'s cells: none unless the
+/// piece asks for them and its grid is Gridfinity's (a half cell must line up with half bins).
+pub fn half_columns(p: &Piece, f: f64) -> u32 {
+    let gridfinity = p.cells.pitch.iter().all(|&s| s == PITCH || s == HALF_PITCH);
+    if !p.half_cells || !gridfinity {
+        return 0;
+    }
+    ((f + 1e-6) / HALF_PITCH).floor() as u32
+}
+
+/// Filler `[x, y, w, d]` with half cells in `blocks` (which together make a rectangle), as a
+/// body of its own: half cells copied from `seeds`, and solid boxes for the rest, joined (each
+/// pocket's cuts cost more than copies, and cuts into a bigger body more again). Returns the
+/// body's name.
+fn half_strip(out: &mut Vec<Value>, p: &Piece, seeds: &mut Seeds, rect: [f64; 4], blocks: &[Block], name: &str) -> String {
+    let h = r4(p.h);
+    let boxed = |[x, y, w, d]: [f64; 4]| json!({"corner": [r4(x), r4(y), 0.0], "length": r4(w), "width": r4(d), "height": h});
+    let blocks: Vec<&Block> = blocks.iter().filter(|b| b.nx * b.ny > 0).collect();
+    let mut bodies = Vec::new();
+    for (i, b) in blocks.iter().enumerate() {
+        let body = seeds.place(out, p, b.corner, b.pitch, &format!("{name} {}", i + 1));
+        if b.nx * b.ny > 1 {
+            out.push(cmd("solid.pattern.rectangular", json!({"bodies": [body], "dir1": [1, 0, 0], "count1": b.nx,
+                "spacing1": r4(b.pitch[0]), "dir2": [0, 1, 0], "count2": b.ny, "spacing2": r4(b.pitch[1]), "@aside": true})));
+            out.push(cmd("solid.combine", json!({"target": body, "tools": ["@aside"], "operation": "join"})));
+        }
+        bodies.push(json!(body));
+    }
+    let x0 = blocks.iter().map(|b| b.corner[0]).fold(f64::INFINITY, f64::min);
+    let y0 = blocks.iter().map(|b| b.corner[1]).fold(f64::INFINITY, f64::min);
+    let x1 = blocks.iter().map(|b| b.corner[0] + b.pitch[0] * b.nx as f64).fold(f64::NEG_INFINITY, f64::max);
+    let y1 = blocks.iter().map(|b| b.corner[1] + b.pitch[1] * b.ny as f64).fold(f64::NEG_INFINITY, f64::max);
+    let first = bodies[0].as_str().unwrap_or_default().to_string();
+    let mut tools: Vec<Value> = bodies[1..].to_vec();
+    for (i, r) in rest(rect, [x0, y0, x1 - x0, y1 - y0]).into_iter().enumerate() {
+        let rest_name = format!("{name} rest{}", i + 1);
+        let mut b = boxed(r);
+        b["operation"] = json!("new");
+        b["body_name"] = json!(rest_name);
+        out.push(cmd("solid.box", b));
+        tools.push(json!(rest_name));
+    }
+    if !tools.is_empty() {
+        out.push(cmd("solid.combine", json!({"target": first, "tools": tools, "operation": "join"})));
+    }
+    first
+}
+
+/// What is left of rectangle `outer` (`[x, y, w, d]`) around `inner`, as up to four rectangles:
+/// the bands in front of and behind it, full width, then the pieces left and right of it.
+pub fn rest(outer: [f64; 4], inner: [f64; 4]) -> Vec<[f64; 4]> {
+    let [ox, oy, ow, od] = outer;
+    let [ix, iy, iw, id] = inner;
+    let (ox1, oy1, ix1, iy1) = (ox + ow, oy + od, ix + iw, iy + id);
+    let mut v = Vec::new();
+    let mut push = |r: [f64; 4]| if r[2] > 1e-6 && r[3] > 1e-6 { v.push(r) };
+    push([ox, oy, ow, iy - oy]);
+    push([ox, iy1, ow, oy1 - iy1]);
+    push([ox, iy, ix - ox, id]);
+    push([ix1, iy, ox1 - ix1, id]);
+    v
+}
+
+/// Cut half-cell pockets, the same profile as a cell's, into `body` at `cells`. No magnet
+/// holes: they sit on the 42 mm grid, outside these cells.
+fn half_pockets(out: &mut Vec<Value>, name: &str, body: &str, p: &Piece, cells: Block) {
+    let (a, m, c) = PLATE_PROFILE;
+    let rim = PLATE_RIM;
+    let (h, [sx, sy]) = (p.h, cells.pitch);
+    let shapes = |inset: f64, r: f64| block_rrects(cells, sx - 2.0 * inset, sy - 2.0 * inset, r);
+    let (r_top, r_mid) = (PLATE_R - rim, PLATE_R - c);
+    sketch(out, h, &format!("{name} 1"), shapes(rim, r_top));
+    out.push(extrude(&format!("{name} 1"), c - rim, Op::Cut(body), Some(-45.0), "negative"));
+    sketch(out, h - c + rim, &format!("{name} 2"), shapes(c, r_mid));
+    out.push(extrude(&format!("{name} 2"), m, Op::Cut(body), None, "negative"));
+    sketch(out, h - c + rim - m, &format!("{name} 3"), shapes(c, r_mid));
+    let last = if p.open { a + 0.2 } else { a };
+    out.push(extrude(&format!("{name} 3"), last, Op::Cut(body), Some(-45.0), "negative"));
 }
 
 /// Round corners of `body`: cut away what lies outside a `PLATE_R` arc at each corner given
