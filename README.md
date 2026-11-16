@@ -102,16 +102,16 @@ Dimensions follow the Gridfinity spec as implemented in gridfinity-rebuilt-opens
 ([research/SPEC.md](research/SPEC.md)). Every shape was checked by exporting STL from SolidCraft and
 measuring its cross-sections. Not yet printed: please report how it fits.
 
-> Status: 1.0.0. Tested with SolidCraft 0.41.0 and 0.42.0, both through scripts/`solidcraft-cli` and in
+> Status: 1.0.1. Tested with SolidCraft 0.42.0 and 0.43.0, both through scripts/`solidcraft-cli` and in
 > the desktop app's plugin dialog. SolidCraft's plugin runtime is itself experimental, so other
 > versions may refuse the package.
 
 ## Install
-Download `gridfinity-1.0.0.zip` from the [latest release](../../releases/latest), then in SolidCraft:
+Download `gridfinity-1.0.1.zip` from the [latest release](../../releases/latest), then in SolidCraft:
 **Plugins › Install plugin…** (or **Preferences › Plugins**) and pick the zip. From a script:
 
 ```json
-{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-1.0.0.zip"}}]}
+{"commands": [{"command": "plugin.install", "params": {"path": "gridfinity-1.0.1.zip"}}]}
 ```
 
 Add `"replace": true` to update an installed version. You can also unpack the zip into
@@ -121,7 +121,10 @@ Add `"replace": true` to update an installed version. You can also unpack the zi
 ## Use it in SolidCraft
 Open **Plugins › Gridfinity › Gridfinity bin…**, **Gridfinity baseplate…** or **Gridfinity drawer
 baseplate…**, fill in the form and press **Run**. Open a design first: from the start page the form
-opens behind it (press Esc to see it). The result is ordinary features in the History bar.
+opens behind it (press Esc to see it). The result is ordinary features in the History bar, in one
+folder named like the body (open the folder to edit a single step).
+
+![The bin's folder in the History bar](docs/images/timeline-folder.png)
 
 | Plugins menu | The bin form (here a custom 40 × 25 mm grid) |
 |---|---|
