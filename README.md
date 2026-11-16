@@ -47,6 +47,12 @@ one undo step, editable afterwards, and they keep working without the plugin.
   ([example](examples/solid-holder.json)). Set a **fill height** (`inside_fill_height`, mm from the
   bottom of the bin) to stop the fill lower: above it the bin is hollow with walls and lip, so a bin
   stacked on top clears what sits in your cutouts.
+- **Eco bins** (`inside`: "Eco (thin walls, hollow feet)"): 0.8 mm walls and floor and hollow
+  feet (a 0.8 mm shell, open into the bin), for much less filament and print time: a 1×1×3 bin takes
+  5.3 cm³ instead of 12.8. Dividers, scoops, label tabs and magnet holes work as in other bins;
+  under dividers and scoops the feet stay solid, so they stand on something, and with magnet holes
+  the hollow starts above them. No screw holes. Like the eco bins of the
+  [FreeCAD Gridfinity Workbench](https://github.com/Stu142/FreeCAD-Gridfinity-Workbench).
 - **baseplate**: width × depth pockets with the Gridfinity profile, full, half or custom grid, a solid
   bottom (optional magnet holes) or an **open frame** (no bottom). Add **filler** on any side
   (`filler_left`, `filler_right`, `filler_front`, `filler_back`, in mm) to fill out a drawer
@@ -76,6 +82,10 @@ one undo step, editable afterwards, and they keep working without the plugin.
 | 2×2×6 bin with dividers, 12 mm scoops and label tabs | Cut through: scoop at the front, label tab at the back |
 |---|---|
 | ![Scoop and label tab](docs/images/bin-scoop-label.png) | ![Section](docs/images/bin-scoop-section.png) |
+
+| Eco 2×2×4 bin with a divider, scoops and label tabs | Cut through: hollow feet, solid under the scoop |
+|---|---|
+| ![Eco bin](docs/images/bin-eco.png) | ![Eco section](docs/images/bin-eco-section.png) |
 
 | Label text, raised (the text is its own body, shown red) | Label text, flush (inlaid) |
 |---|---|
@@ -149,8 +159,10 @@ folder named like the body (open the folder to edit a single step).
 SolidCraft gives a plugin run 256 commands and 30 seconds. The plugin makes one cell and copies
 it, so the number of commands stays small at any size; the time goes on joining the cells, about
 0.15 s a cell on a 4-core desktop, more with magnet or screw holes. One run builds up to 100 cells
-(a 10 × 10 baseplate in about 16 s), 42 with magnet holes, fewer for bins with screw holes; past
-that the plugin says so before it starts. Half cells in the filler take longer than cells: a 4 × 4
+(a 10 × 10 baseplate in about 16 s), 42 with magnet holes. Bins take longer: up to 72 cells (8 × 9),
+45 with magnet holes, 24 with screw holes (20 with both), and an eco bin up to 25 (5 × 5), 21 with magnet holes.
+Dividers that cross each other, scoops and label tabs count in too, so a big bin with many
+compartments may need fewer dividers. Past that the plugin says so before it starts. Half cells in the filler take longer than cells: a 4 × 4
 baseplate with magnet holes and a ring of half cells around it takes about 14 s, and the plugin
 counts them in when it decides; set Leftover space to Solid to leave them out. For a bigger baseplate use the drawer baseplate and
 build it a piece at a time: set **Piece** to 1, 2, … (numbered along X, then Y) and run once for
@@ -178,14 +190,14 @@ run an entry with that hash ([examples/](examples/)).
 
 | Entry | Parameters (default) |
 |---|---|
-| `bin` | `grid` "42 mm (full)" / "21 mm (half)" / "Custom (sizes below)", `custom_size_x`, `custom_size_y` 15–100 mm (42, Custom only), `width` up to 504 mm and 24 cells (1), `depth` (1), `height` 2–20 units (3), `inside` "Hollow" / "Solid (for custom cutouts)", `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `inside_scoop` 0–40 mm (0), `inside_label_tab` (false), `inside_label_text` (labels separated by `;`), `inside_label_text_size` 0–20 mm (0: fit), `inside_label_text_height` 0.1–3 mm (0.4), `inside_label_text_style` "Raised" / "Flush (inlaid)", `inside_label_text_font` (installed font, empty: built-in), `inside_fill_height` mm (0: to the top; solid bins, from 6 mm to 1 mm under the inside top), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
+| `bin` | `grid` "42 mm (full)" / "21 mm (half)" / "Custom (sizes below)", `custom_size_x`, `custom_size_y` 15–100 mm (42, Custom only), `width` up to 504 mm and 24 cells (1), `depth` (1), `height` 2–20 units (3), `inside` "Hollow" / "Eco (thin walls, hollow feet)" / "Solid (for custom cutouts)", `dividers_x` 0–10 (0), `dividers_y` 0–10 (0), `holes_magnet` (false), `holes_screw` (false), `inside_scoop` 0–40 mm (0), `inside_label_tab` (false), `inside_label_text` (labels separated by `;`), `inside_label_text_size` 0–20 mm (0: fit), `inside_label_text_height` 0.1–3 mm (0.4), `inside_label_text_style` "Raised" / "Flush (inlaid)", `inside_label_text_font` (installed font, empty: built-in), `inside_fill_height` mm (0: to the top; solid bins, from 6 mm to 1 mm under the inside top), `position_x`, `position_y` mm (0), `stacking_lip` (true), `title` (body name) |
 | `baseplate` | `grid`, `custom_size_x`, `custom_size_y`, `width` (3), `depth` (3), `bottom` "Solid" / "Open (frame only)", `holes_magnet` (false, solid only), `filler_left`, `filler_right`, `filler_front`, `filler_back` 0–200 mm (0), `leftover` "Half cells" / "Solid", `position_x`, `position_y` mm (0, the corner of the plate with its filler), `title` |
 | `drawer` | `drawer_width`, `drawer_depth` 15–1000 mm (300), `printer_x`, `printer_y` 50–1000 mm (256), `grid`, `custom_size_x`, `custom_size_y`, `bottom`, `holes_magnet`, `filler_x` "Even (both sides)" / "Left" / "Right", `filler_y` "Even (both sides)" / "Front" / "Back", `leftover` "Half cells" / "Solid", `piece` (0: all), `position_x`, `position_y` mm (0), `title` |
 
 Scripts may also say `"full"` / `"half"` / `"custom"` / `"open"` and use the older names `magnets`, `screws`, `name` and `origin: [x, y]`.
 
 Choices that differ slightly from the spec: the stacking lip has a 0.3 mm flat on top instead of a
-knife edge, the floor inside a bin is at 6 mm, and baseplate pockets keep a 0.05 mm rim between
+knife edge, the floor inside a bin is at 6 mm (5.55 mm in an eco bin), and baseplate pockets keep a 0.05 mm rim between
 them (SolidCraft's kernel can't taper profiles that touch).
 
 ## Build

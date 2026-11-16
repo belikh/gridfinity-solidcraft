@@ -16,6 +16,8 @@ const FOOT: (f64, f64, f64) = (0.8, 1.8, 2.15);
 const FOOT_TOP_R: f64 = 3.75;
 pub(crate) const FLOOR_Z: f64 = 6.0;
 const WALL: f64 = 0.95;
+/// Eco bins: walls, and the shell of the hollow feet and the floor (two lines of a 0.4 mm nozzle).
+const ECO_WALL: f64 = 0.8;
 const LIP: (f64, f64, f64) = (0.7, 1.8, 1.9);
 const LIP_FLAT: f64 = 0.3;
 const LIP_SUPPORT: f64 = 1.2;
@@ -55,6 +57,8 @@ pub struct BinOptions {
     pub lip: bool,
     /// Filled up to the top of the walls (no cavity, no dividers), for cutting custom holders.
     pub solid: bool,
+    /// Thin walls, a thin floor and hollow feet, to save filament and print time.
+    pub eco: bool,
     /// Solid bins: top of the fill, mm from the bottom of the bin (0: up to the top of the walls).
     /// Above it the bin is hollow, so another bin stacks on top clear of what sits in the cutout.
     pub fill: f64,
@@ -80,8 +84,28 @@ pub struct BinOptions {
 /// Height of the inside of a bin above its floor: the highest a solid bin's fill can stop below
 /// the walls (mm from the bottom of the bin).
 pub fn bin_inside_top(units: u32, lip: bool) -> f64 {
+    inside_top(units, lip, WALL)
+}
+
+fn inside_top(units: u32, lip: bool, wall: f64) -> f64 {
     let height = UNIT_H * units as f64;
-    if lip { height - LIP_SUPPORT - (LIP.0 + LIP.2 - WALL) } else { height }
+    if lip { height - LIP_SUPPORT - (LIP.0 + LIP.2 - wall) } else { height }
+}
+
+impl BinOptions {
+    fn wall(&self) -> f64 {
+        if self.eco { ECO_WALL } else { WALL }
+    }
+
+    /// Top of the floor inside the bin: an eco bin's thin floor lies right on its feet.
+    pub(crate) fn floor(&self) -> f64 {
+        if self.eco { FOOT.0 + FOOT.1 + FOOT.2 + ECO_WALL } else { FLOOR_Z }
+    }
+
+    /// The top of the inside at the height scoops and label tabs are sized for.
+    fn sized_top(&self) -> f64 {
+        inside_top(self.sized_units, self.lip, self.wall())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -116,18 +140,18 @@ pub(crate) fn text_width(s: &str, h: f64) -> f64 {
 pub fn label_areas(o: &BinOptions) -> Vec<(f64, f64, f64, f64)> {
     let w = o.pitch[0] * o.nx as f64 - GAP;
     let d = o.pitch[1] * o.ny as f64 - GAP;
-    let (iw, id) = (w - 2.0 * WALL, d - 2.0 * WALL);
-    let (x0, y0) = (o.origin[0] + GAP / 2.0 + WALL, o.origin[1] + GAP / 2.0 + WALL);
+    let wall = o.wall();
+    let (iw, id) = (w - 2.0 * wall, d - 2.0 * wall);
+    let (x0, y0) = (o.origin[0] + GAP / 2.0 + wall, o.origin[1] + GAP / 2.0 + wall);
     let rows = o.div_y + 1;
     let cols = o.div_x + 1;
-    let sized = bin_inside_top(o.sized_units, o.lip);
     let depth = id / rows as f64 - if rows > 1 { DIVIDER / 2.0 } else { 0.0 };
-    let label = LABEL_W.min(depth / 2.0).min((sized - FLOOR_Z) / 2.0);
+    let label = LABEL_W.min(depth / 2.0).min((o.sized_top() - o.floor()) / 2.0);
     let mut v = Vec::new();
     for k in (0..rows).rev() {
         let hi = y0 + id * (k + 1) as f64 / rows as f64 - if k + 1 < rows { DIVIDER / 2.0 } else { 0.0 };
         // the lip hangs over the back of the last row's tab
-        let hidden = if k + 1 == rows && o.lip { LIP.0 + LIP.2 - WALL } else { 0.0 };
+        let hidden = if k + 1 == rows && o.lip { LIP.0 + LIP.2 - wall } else { 0.0 };
         // under the tab's front edge the 45° underside leaves it thin: sunk text keeps its depth
         // plus the margin of tab under it
         let thin = if o.flush { o.text_height } else { 0.0 };
@@ -318,6 +342,7 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     let height = UNIT_H * o.units as f64;
     let block_top = height + if o.lip { LIP.0 + LIP.1 + LIP.2 - LIP_FLAT } else { 0.0 };
     let blk = Block { corner: o.origin, nx: o.nx, ny: o.ny, pitch };
+    let (wall, floor) = (o.wall(), o.floor());
 
     sketch(&mut out, foot_h, &n("Body"), vec![rrect(cx, cy, w, d, top)]);
     out.push(extrude(&n("Body"), block_top - foot_h, Op::New(b), None, ""));
@@ -347,7 +372,7 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
             sketch(&mut out, z, &n("Support1"), vec![rrect(cx, cy, w - 2.0 * tip, d - 2.0 * tip, top - tip)]);
             out.push(extrude(&n("Support1"), LIP_SUPPORT, Op::Cut(b), None, "negative"));
             z -= LIP_SUPPORT;
-            let slope = tip - WALL;
+            let slope = tip - wall;
             sketch(&mut out, z, &n("Support2"), vec![rrect(cx, cy, w - 2.0 * tip, d - 2.0 * tip, top - tip)]);
             out.push(extrude(&n("Support2"), slope, Op::Cut(b), Some(45.0), "negative"));
             z -= slope;
@@ -356,13 +381,16 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
         z = height;
     }
     if pocket {
-        let floor = if hollow { FLOOR_Z } else { o.fill };
-        sketch(&mut out, z, &n("Cavity"), vec![rrect(cx, cy, w - 2.0 * WALL, d - 2.0 * WALL, top - WALL)]);
-        out.push(extrude(&n("Cavity"), z - floor, Op::Cut(b), None, "negative"));
+        let bottom = if hollow { floor } else { o.fill };
+        sketch(&mut out, z, &n("Cavity"), vec![rrect(cx, cy, w - 2.0 * wall, d - 2.0 * wall, top - wall)]);
+        out.push(extrude(&n("Cavity"), z - bottom, Op::Cut(b), None, "negative"));
     }
+    // Eco bins: where the feet stay solid under the floor, so dividers and scoops stand on
+    // something (x0, y0, x1, y1).
+    let mut keep = Vec::new();
     if hollow {
 
-        let (iw, id) = (w - 2.0 * WALL, d - 2.0 * WALL);
+        let (iw, id) = (w - 2.0 * wall, d - 2.0 * wall);
         let (x0, y0) = (cx - iw / 2.0, cy - id / 2.0);
         // Scoops and label tabs: one profile per row of compartments, drawn across Y on a YZ
         // sketch at the cavity's left side and extruded right across the whole inside.
@@ -374,24 +402,25 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
         };
         let depth = row(0).1 - row(0).0;
         let e = 0.01; // reach a little into the wall and floor, so the shapes join solidly
-        let sized = bin_inside_top(o.sized_units, o.lip);
-        let label = if o.label { LABEL_W.min(depth / 2.0).min((sized - FLOOR_Z) / 2.0) } else { 0.0 };
+        let sized = o.sized_top();
+        let label = if o.label { LABEL_W.min(depth / 2.0).min((sized - floor) / 2.0) } else { 0.0 };
         let mut profiles = Vec::new();
-        let r = o.scoop.min(depth - label - 1.0).min(sized - FLOOR_Z);
+        let r = o.scoop.min(depth - label - 1.0).min(sized - floor);
         if r > 0.5 {
             for k in 0..rows {
                 let yf = row(k).0;
-                // a concave quarter circle, centre (yf + r, FLOOR_Z + r), from the floor up the
+                // a concave quarter circle, centre (yf + r, floor + r), from the floor up the
                 // wall, in straight steps (a true arc, tangent to floor and wall, makes the
                 // kernel's boolean fail), closed by lines just inside the wall and floor
-                let mut pts = vec![[yf - e, FLOOR_Z - e]];
+                let mut pts = vec![[yf - e, floor - e]];
                 pts.extend((0..=SCOOP_STEPS).map(|i| {
                     let t = std::f64::consts::FRAC_PI_2 * (3.0 - i as f64 / SCOOP_STEPS as f64);
-                    [yf + r + r * t.cos(), FLOOR_Z + r + r * t.sin()]
+                    [yf + r + r * t.cos(), floor + r + r * t.sin()]
                 }));
-                pts.push([yf - e, FLOOR_Z + r]);
+                pts.push([yf - e, floor + r]);
                 let pts: Vec<[f64; 2]> = pts.iter().map(|&[u, v]| [r4(u), r4(v)]).collect();
                 profiles.push(cmd("sketch.line", json!({"points": pts, "closed": true})));
+                keep.push([x0 - 5.0, yf - 5.0, x0 + iw + 5.0, yf + r]);
             }
         }
         if label > 0.0 {
@@ -409,11 +438,11 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
             // their ends poke out a little through the rounded corners of the wall: trim the bin
             // back to its outline there
             let trim = n("Scoops trim");
-            sketch(&mut out, FLOOR_Z - 2.0 * e, &trim, vec![
+            sketch(&mut out, floor - 2.0 * e, &trim, vec![
                 rrect(cx, cy, w, d, top),
                 cmd("sketch.rectangle.two_point", json!({"p0": [r4(cx - w / 2.0 - 5.0), r4(cy - d / 2.0 - 5.0)], "p1": [r4(cx + w / 2.0 + 5.0), r4(cy + d / 2.0 + 5.0)]})),
             ]);
-            let mut cut = extrude(&trim, z - FLOOR_Z + 4.0 * e, Op::Cut(b), None, "positive");
+            let mut cut = extrude(&trim, z - floor + 4.0 * e, Op::Cut(b), None, "positive");
             cut["params"]["profiles"] = json!([{"point": [r4(cx - w / 2.0 - 2.5), r4(cy)]}]);
             out.push(cut);
         }
@@ -422,13 +451,15 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
         // across them.
         for k in 1..=o.div_x {
             let x = x0 + iw * k as f64 / (o.div_x + 1) as f64 - DIVIDER / 2.0;
-            out.push(cmd("solid.box", json!({"corner": [r4(x), r4(y0), FLOOR_Z], "length": DIVIDER, "width": r4(id),
-                "height": r4(z - FLOOR_Z), "operation": "join", "targets": [b]})));
+            out.push(cmd("solid.box", json!({"corner": [r4(x), r4(y0), floor], "length": DIVIDER, "width": r4(id),
+                "height": r4(z - floor), "operation": "join", "targets": [b]})));
+            keep.push([x, y0 - 5.0, x + DIVIDER, y0 + id + 5.0]);
         }
         for k in 1..=o.div_y {
             let y = y0 + id * k as f64 / (o.div_y + 1) as f64 - DIVIDER / 2.0;
-            out.push(cmd("solid.box", json!({"corner": [r4(x0), r4(y), FLOOR_Z], "length": r4(iw), "width": DIVIDER,
-                "height": r4(z - FLOOR_Z), "operation": "join", "targets": [b]})));
+            out.push(cmd("solid.box", json!({"corner": [r4(x0), r4(y), floor], "length": r4(iw), "width": DIVIDER,
+                "height": r4(z - floor), "operation": "join", "targets": [b]})));
+            keep.push([x0 - 5.0, y, x0 + iw + 5.0, y + DIVIDER]);
         }
 
     }
@@ -491,6 +522,62 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
         }
     }
     out.push(cmd("solid.combine", json!({"target": b, "tools": feet, "operation": "join"})));
+
+    if o.eco {
+        // Hollow feet: the room inside each foot, ECO_WALL in from its outside and up through the
+        // floor, made for one cell, repeated, and cut out of the bin at once. Its walls go up
+        // straight, then lean out at 45° with the foot's top chamfer; with magnet holes its
+        // bottom is raised over them.
+        let pocket = n("Pocket");
+        let s = ECO_WALL;
+        let z0 = s + if o.magnets { MAGNET_DEPTH } else { 0.0 };
+        // where the inside starts to lean out: the same wall thickness across the chamfer
+        let z1 = a + m + s * (std::f64::consts::PI / 8.0).tan();
+        let size = |z: f64| {
+            let g = (z - z1).max(0.0);
+            (sx_mid - 2.0 * s + 2.0 * g, sy_mid - 2.0 * s + 2.0 * g, (r_mid - s).max(0.2) + g)
+        };
+        let profile = |out: &mut Vec<Value>, z: f64, name: &str| {
+            let (pw, pd, pr) = size(z);
+            sketch(out, z, &n(name), block_rrects(one, pw, pd, pr));
+        };
+        let mut op = Op::New(&pocket);
+        if z0 < z1 {
+            profile(&mut out, z0, "Pocket1");
+            out.push(extrude(&n("Pocket1"), z1 - z0, op, None, "positive"));
+            op = Op::Join(&pocket);
+        }
+        let zs = z0.max(z1);
+        profile(&mut out, zs, "Pocket2");
+        out.push(extrude(&n("Pocket2"), foot_h - zs, op, Some(45.0), "positive"));
+        profile(&mut out, foot_h, "Pocket3");
+        out.push(extrude(&n("Pocket3"), floor - foot_h + 0.01, Op::Join(&pocket), None, "positive"));
+        let pockets = if many {
+            let mut p = json!({"bodies": [pocket], "dir1": [1, 0, 0], "count1": o.nx, "spacing1": r4(px)});
+            if o.ny > 1 {
+                p["dir2"] = json!([0, 1, 0]);
+                p["count2"] = json!(o.ny);
+                p["spacing2"] = json!(r4(py));
+            }
+            if o.nx == 1 {
+                p = json!({"bodies": [pocket], "dir1": [0, 1, 0], "count1": o.ny, "spacing1": r4(py)});
+            }
+            out.push(cmd("solid.pattern.rectangular", p));
+            json!([pocket, "@created"])
+        } else {
+            json!([pocket])
+        };
+        // under scoops and dividers the feet stay solid
+        if !keep.is_empty() {
+            let rects = keep.iter().map(|&[x0, y0, x1, y1]| cmd("sketch.rectangle.two_point",
+                json!({"p0": [r4(x0), r4(y0)], "p1": [r4(x1), r4(y1)]}))).collect();
+            sketch(&mut out, -1.0, &n("Solid feet"), rects);
+            let mut cut = extrude(&n("Solid feet"), floor + 2.0, Op::Cut(&pocket), None, "positive");
+            cut["params"]["targets"] = pockets.clone();
+            out.push(cut);
+        }
+        out.push(cmd("solid.combine", json!({"target": b, "tools": pockets, "operation": "cut"})));
+    }
 
     // Label text on the tabs, standing up from them or sunk in flush, as a body of its own, so
     // it can be printed in another filament.
@@ -620,7 +707,7 @@ mod tests {
     use super::*;
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
-        BinOptions { nx, ny, pitch: [PITCH; 2], units, sized_units: units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, fill: 0.0, scoop: 0.0, label: false,
+        BinOptions { nx, ny, pitch: [PITCH; 2], units, sized_units: units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, eco: false, fill: 0.0, scoop: 0.0, label: false,
             label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(),
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
@@ -701,6 +788,42 @@ mod tests {
         o.lip = false;
         let cuts: Vec<_> = bin_commands(&o).into_iter().filter(|v| v["command"] == "solid.extrude" && v["params"]["operation"] == "cut").collect();
         assert!(cuts.iter().all(|v| v["params"]["sketch"].as_str().unwrap().ends_with("Magnets")));
+    }
+
+    #[test]
+    fn eco_bin_has_thin_walls_and_hollow_feet_cut_out_at_once() {
+        let mut o = bin(2, 2, 3);
+        o.eco = true;
+        o.magnets = false;
+        o.div_x = 0;
+        let c = bin_commands(&o);
+        let sk = |name: &str| c.iter().find(|v| v["command"] == "sketch.create" && v["params"]["name"] == format!("Bin {name}")).unwrap().clone();
+        let at = |name: &str| sk(name)["params"]["offset"].as_f64().unwrap();
+        // the floor 0.8 mm over the feet, the walls 0.8 mm
+        let cav = c.iter().find(|v| v["command"] == "solid.extrude" && v["params"]["sketch"] == "Bin Cavity").unwrap();
+        assert!((at("Cavity") - cav["params"]["distance"].as_f64().unwrap() - 5.55).abs() < 1e-9);
+        let rect = c.iter().skip_while(|v| v["params"]["name"] != "Bin Cavity").nth(1).unwrap();
+        assert!((rect["params"]["p1"][0].as_f64().unwrap() - rect["params"]["p0"][0].as_f64().unwrap() - (83.5 - 1.6)).abs() < 1e-9);
+        // one pocket: straight from 0.8 mm, then out at 45°, then through the floor
+        assert_eq!((at("Pocket1"), at("Pocket2"), at("Pocket3")), (0.8, r4(2.6 + 0.8 * (std::f64::consts::PI / 8.0).tan()), 4.75));
+        assert_eq!(body_pattern(&c), Some((2, 2)));
+        let last_cut = c.iter().rev().find(|v| v["command"] == "solid.combine").unwrap();
+        assert_eq!(last_cut["params"], json!({"target": "Bin", "tools": ["Bin Pocket", "@created"], "operation": "cut"}));
+        assert!(!sketches(&c).iter().any(|n| n.ends_with("Solid feet")));
+
+        // magnet holes: the pocket starts over them, at once leaning out
+        o.magnets = true;
+        let c = bin_commands(&o);
+        assert!(!sketches(&c).iter().any(|n| n.ends_with("Pocket1")));
+        let p2 = c.iter().find(|v| v["command"] == "sketch.create" && v["params"]["name"] == "Bin Pocket2").unwrap();
+        assert_eq!(p2["params"]["offset"], json!(3.2));
+
+        // the feet stay solid under dividers and scoops
+        o.div_x = 1;
+        o.scoop = 10.0;
+        let c = bin_commands(&o);
+        let i = c.iter().position(|v| v["command"] == "sketch.create" && v["params"]["name"] == "Bin Solid feet").unwrap();
+        assert_eq!(c[i + 1..].iter().take_while(|v| v["command"] != "sketch.finish").count(), 2);
     }
 
     #[test]

@@ -138,11 +138,12 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
     let units = get_u(p, "height", 3, 2, MAX_UNITS)?;
     let half = grid_label(pitch);
     let lip = get_b(p, &["stacking_lip"], true)?;
-    let solid = match p.get("inside") {
-        None | Some(Value::Null) => false,
-        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("solid") => true,
-        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("hollow") => false,
-        _ => return Err("inside must be \"Hollow\" or \"Solid (for custom cutouts)\"".into()),
+    let (solid, eco) = match p.get("inside") {
+        None | Some(Value::Null) => (false, false),
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("solid") => (true, false),
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("hollow") => (false, false),
+        Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("eco") => (false, true),
+        _ => return Err("inside must be \"Hollow\", \"Eco (thin walls, hollow feet)\" or \"Solid (for custom cutouts)\"".into()),
     };
     // only a solid bin has a fill; 0 fills it to the top of the walls
     let mut fill = get_mm(p, "inside_fill_height", 0.0, 0.0, UNIT_H * MAX_UNITS as f64)?;
@@ -177,6 +178,7 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         div_y: get_u(p, "dividers_y", 0, 0, MAX_DIVIDERS)?,
         lip,
         solid,
+        eco,
         fill,
         scoop: get_mm(p, "inside_scoop", 0.0, 0.0, 40.0)?,
         label: get_b(p, &["inside_label_tab"], false)?,
@@ -197,6 +199,9 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity{half} bin {nx}x{ny}x{units}"))?,
     };
+    if eco && o.screws {
+        return Err("An eco bin has hollow feet, with no room for screw holes: turn Screw holes off, or choose Inside \"Hollow\".".into());
+    }
     if o.label_text.iter().any(|t| !t.is_empty()) {
         check_label_text(&mut o)?;
     }
@@ -320,6 +325,18 @@ const MAX_DRAWER: f64 = 1000.0;
 /// with magnet holes: 15 s, 8 x 8 with them: over 30 s). These keep a run within the limit.
 const MAX_CELLS_RUN: u32 = 100;
 const MAX_CELLS_RUN_MAGNETS: u32 = 42;
+/// Bins take longer a cell, in the desktop app 0.43 under xvfb: 8 x 8 cells 19 s, 9 x 9 26 s,
+/// 10 x 10 over 30 s. Eco bins' hollow feet take about 0.8 s a cell to join (4 x 4: 13 s, 5 x 5:
+/// 19 s, 6 x 6: 29 s).
+const MAX_BIN_CELLS_RUN: u32 = 72;
+const ECO_WEIGHT: f64 = 1.8;
+/// Dividers count as this many cells each, and where they cross more (a 5 x 5 bin takes 7 s,
+/// 11 s with 10 dividers one way, 29 s with 10 each way; a 2 x 2 one with 10 each way 22 s).
+const DIVIDER_WEIGHT: f64 = 0.5;
+const CROSSING_WEIGHT: f64 = 0.6;
+/// A compartment with a scoop or label tab counts as this many cells (7 x 7 cells with 3 x 3
+/// compartments: 15 s, 18 s with scoops and label tabs).
+const SCOOP_WEIGHT: f64 = 1.0;
 /// Half cells in the filler add to a run's time, in a drawer more (in the desktop app under
 /// xvfb: a 4 x 4 plate with magnet holes and a ring of 20 half cells takes 14 s, 5 x 5 with 24
 /// of them 17 s, 6 x 6 without magnet holes and 28 of them 19 s; drawers of 400 x 340 and
@@ -653,19 +670,31 @@ pub fn plan(entry: &str, params: &Value) -> Result<(String, Vec<Value>), String>
                      (30 seconds): use at most {MAX_SCOOP_COMPARTMENTS}, or fewer dividers."
                 ));
             }
-            // holes make the feet slower to join: screw holes (which reach into the block) most
-            let weight = 1.0 + if o.magnets { 0.6 } else { 0.0 } + if o.screws { 2.0 } else { 0.0 };
+            // holes and hollow feet make the feet slower to join: screw holes (which reach into
+            // the block) most
+            let weight = 1.0 + if o.magnets { 0.6 } else { 0.0 } + if o.screws { 2.0 } else { 0.0 }
+                + if o.eco { ECO_WEIGHT } else { 0.0 };
             let cells = o.nx * o.ny;
-            if cells as f64 * weight > MAX_CELLS_RUN as f64 {
-                let fit = (MAX_CELLS_RUN as f64 / weight).floor();
+            let (dx, dy) = (o.div_x as f64, o.div_y as f64);
+            let scoops = !o.solid && (o.scoop > 0.0 || o.label);
+            let dividers = if o.solid { 0.0 } else { DIVIDER_WEIGHT * (dx + dy) + CROSSING_WEIGHT * dx * dy }
+                + if scoops { SCOOP_WEIGHT * compartments as f64 } else { 0.0 };
+            if cells as f64 * weight <= MAX_BIN_CELLS_RUN as f64 && cells as f64 * weight + dividers > MAX_BIN_CELLS_RUN as f64 {
+                return Err(format!("{} x {} compartments{} take too long in a bin this size: SolidCraft gives a plugin 30 seconds. \
+                    Use fewer dividers{}, or make a smaller bin.", o.div_x + 1, o.div_y + 1,
+                    if scoops { " with a scoop or label tab" } else { "" }, if scoops { " (or no scoop or label tab)" } else { "" }));
+            }
+            if cells as f64 * weight > MAX_BIN_CELLS_RUN as f64 {
+                let fit = (MAX_BIN_CELLS_RUN as f64 / weight).floor();
                 let with = match (o.magnets, o.screws) {
                     (true, true) => " with magnet and screw holes",
                     (true, false) => " with magnet holes",
                     (false, true) => " with screw holes",
                     _ => "",
                 };
+                let what = if o.eco { "an eco bin" } else { "a bin" };
                 return Err(format!("{cells} cells is too many for one run: SolidCraft gives a plugin 30 seconds, \
-                    which is about {fit} cells{with}. Make a smaller bin."));
+                    which is about {fit} cells for {what}{with}. Make a smaller bin."));
             }
             Ok((o.name.clone(), parametric_height(&o, bin_commands(&o))))
         }
@@ -791,6 +820,8 @@ mod tests {
         assert!(parse_bin(&json!({"grid": "huge"})).is_err());
         assert!(parse_bin(&json!({"width": 13})).is_err());
         assert!(parse_bin(&json!({"inside": "Solid (for custom cutouts)"})).unwrap().solid);
+        assert!(parse_bin(&json!({"inside": "Eco (thin walls, hollow feet)"})).unwrap().eco);
+        assert!(parse_bin(&json!({"inside": "Eco", "holes_screw": true})).unwrap_err().contains("Screw holes off"));
         assert!(!parse_bin(&json!({"inside": "Hollow"})).unwrap().solid);
         assert!(parse_bin(&json!({"inside": "liquid"})).is_err());
         let b = parse_baseplate(&json!({"grid": "21 mm (half)", "bottom": "Open (frame only)", "width": 4})).unwrap();
@@ -822,7 +853,22 @@ mod tests {
         assert!(e.contains("144 cells") && e.contains("drawer baseplate"));
         assert!(plan("baseplate", &json!({"width": 7, "depth": 7, "holes_magnet": true})).is_err());
         assert!(plan("bin", &json!({"width": 7, "depth": 6, "holes_magnet": true})).is_ok());
-        assert!(plan("bin", &json!({"width": 7, "depth": 6, "holes_magnet": true, "holes_screw": true})).unwrap_err().contains("27 cells"));
+        assert!(plan("bin", &json!({"width": 7, "depth": 6, "holes_magnet": true, "holes_screw": true})).unwrap_err().contains("20 cells"));
+        assert!(plan("bin", &json!({"width": 9, "depth": 8})).is_ok());
+        assert!(plan("bin", &json!({"width": 9, "depth": 9})).unwrap_err().contains("about 72 cells for a bin."));
+        // eco bins' hollow feet take longer
+        assert!(plan("bin", &json!({"width": 5, "depth": 5, "inside": "Eco"})).is_ok());
+        assert!(plan("bin", &json!({"width": 6, "depth": 5, "inside": "Eco"})).unwrap_err().contains("about 25 cells for an eco bin."));
+        assert!(plan("bin", &json!({"width": 5, "depth": 4, "inside": "Eco", "holes_magnet": true})).is_ok());
+        // dividers that cross take time too
+        assert!(plan("bin", &json!({"width": 5, "depth": 5, "dividers_x": 10})).is_ok());
+        assert!(plan("bin", &json!({"width": 2, "depth": 2, "dividers_x": 9, "dividers_y": 9})).is_ok());
+        assert!(plan("bin", &json!({"width": 5, "depth": 5, "dividers_x": 10, "dividers_y": 10})).unwrap_err().contains("fewer dividers"));
+        assert!(plan("bin", &json!({"width": 3, "depth": 3, "dividers_x": 10, "dividers_y": 10, "inside": "Eco"})).is_err());
+        let scooped = json!({"width": 7, "depth": 7, "dividers_x": 2, "dividers_y": 2, "inside_scoop": 10, "inside_label_tab": true});
+        assert!(plan("bin", &scooped).is_ok());
+        let e = plan("bin", &json!({"width": 6, "depth": 6, "dividers_x": 5, "dividers_y": 5, "inside_scoop": 10})).unwrap_err();
+        assert!(e.contains("6 x 6 compartments with a scoop"), "{e}");
         // a big drawer: all at once is too much, but it says how to build it piece by piece
         let d = json!({"drawer_width": 600, "drawer_depth": 500, "holes_magnet": true});
         let e = plan("drawer", &d).unwrap_err();
