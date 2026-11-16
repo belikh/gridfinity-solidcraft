@@ -208,6 +208,27 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
 /// take this many of the two together (30 seconds); sunk (flush) letters count twice.
 const LABEL_BUDGET: usize = 50;
 
+/// Why a label tab has no room for text: in a low bin the tab is small, and the stacking lip covers
+/// its back. Says how tall the bin must be, or that turning the lip off is enough.
+fn too_low(o: &BinOptions) -> String {
+    let fits = |units: u32, lip: bool| {
+        let q = BinOptions { units, sized_units: units, lip, ..o.clone() };
+        label_areas(&q).iter().zip(&o.label_text).all(|(a, t)| a.3 / text_depth(t) >= 2.0)
+    };
+    let taller = (o.units + 1..=o.units + 10).find(|&k| fits(k, o.lip));
+    let lip_off = o.lip && fits(o.units, false);
+    let mut fix = Vec::new();
+    if let Some(k) = taller {
+        fix.push(format!("make the bin {k} units tall"));
+    }
+    if lip_off {
+        fix.push("turn Stacking lip off".to_string());
+    }
+    format!("A bin {} units tall has too small a label tab for text{}: {}.", o.units,
+        if o.lip { " under its stacking lip" } else { "" },
+        if fix.is_empty() { "leave Label text empty".to_string() } else { fix.join(", or ") })
+}
+
 /// Label text puts a label tab on the bin, and every label must fit on its tab.
 fn check_label_text(o: &mut BinOptions) -> Result<(), String> {
     if o.solid {
@@ -216,8 +237,10 @@ fn check_label_text(o: &mut BinOptions) -> Result<(), String> {
     o.label = true;
     let areas = label_areas(o);
     if o.label_text.len() > areas.len() {
-        return Err(format!("{} labels, but the bin has {} compartments: give one label per compartment, separated by ;, \
-            back row first, left to right.", o.label_text.len(), areas.len()));
+        let n = areas.len();
+        return Err(format!("{} labels, but the bin has {n} compartment{}: give one label per compartment, separated by ;, \
+            back row first, left to right (Dividers across X and Y make more compartments).",
+            o.label_text.len(), if n == 1 { "" } else { "s" }));
     }
     let glyphs: usize = o.label_text.iter().map(|t| t.chars().filter(|c| !c.is_whitespace()).count()).sum();
     // sunk text is cut out of the bin as well: each letter costs about twice as much
@@ -232,6 +255,9 @@ fn check_label_text(o: &mut BinOptions) -> Result<(), String> {
             continue;
         }
         let h = label_size(o, t, w, d);
+        if d / text_depth(t) < 2.0 {
+            return Err(too_low(o));
+        }
         if h < 2.0 {
             return Err(format!("\"{t}\" does not fit on its label tab ({w:.0} mm wide): make it shorter or the bin wider."));
         }
@@ -877,7 +903,14 @@ mod tests {
         let (_, c) = plan("bin", &json!({"inside_label_tab": true})).unwrap();
         assert!(!c.iter().any(|v| v["command"] == "sketch.text"));
 
-        assert!(parse_bin(&json!({"inside_label_text": "a; b"})).unwrap_err().contains("2 labels, but the bin has 1 compartments"));
+        assert!(parse_bin(&json!({"inside_label_text": "a; b"})).unwrap_err().contains("2 labels, but the bin has 1 compartment:"));
+        // a low bin's tab is too small for text, however wide: say how to fix that, not "shorter"
+        let low = json!({"width": 3, "depth": 3, "height": 2, "dividers_x": 3, "inside_label_text": "M12; M13; M14",
+            "inside_label_text_style": "Flush (inlaid)"});
+        assert_eq!(parse_bin(&low).unwrap_err(), "A bin 2 units tall has too small a label tab for text under its stacking lip: \
+            make the bin 3 units tall, or turn Stacking lip off.");
+        assert!(parse_bin(&json!({"width": 3, "depth": 3, "height": 3, "dividers_x": 3, "inside_label_text": "M12; M13; M14",
+            "inside_label_text_style": "Flush (inlaid)"})).is_ok());
         assert!(parse_bin(&json!({"inside": "Solid (for custom cutouts)", "inside_label_text": "x"})).unwrap_err().contains("hollow"));
         assert!(parse_bin(&json!({"inside_label_text": "A very long label for one small cell"})).unwrap_err().contains("does not fit"));
         assert!(parse_bin(&json!({"width": 2, "inside_label_text": "M3", "inside_label_text_size": 8})).unwrap_err().contains("at 8 mm"));
