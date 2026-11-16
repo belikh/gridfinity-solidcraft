@@ -523,7 +523,8 @@
    "sketch.text",
    "parameters.add",
    "parameters.list",
-   "model.body_features"
+   "model.body_features",
+   "timeline.group"
   ],
   "limits": {
    "fuel": 2000000000,

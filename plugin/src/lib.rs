@@ -401,6 +401,8 @@ pub struct Runner {
     sketches: std::collections::HashMap<String, Value>,
     /// Text parameter names the plan uses, and the names they get in the design.
     params: std::collections::HashMap<String, String>,
+    /// Every sketch and feature the run made, in order, for the folder they go in.
+    pub features: Vec<Value>,
 }
 
 /// The bin's height as a parameter, `Height_units` (the runner makes its name unique), that
@@ -554,6 +556,10 @@ impl Runner {
     pub fn record(&mut self, c: &Value, reply: &Value) {
         let name = c["command"].as_str().unwrap_or_default();
         let reply = reply.get("result").filter(|r| r.is_object()).unwrap_or(reply);
+        let made = if name == "sketch.create" { reply.get("sketch") } else { reply.get("feature") };
+        if let Some(id) = made.filter(|id| id.is_number()) {
+            self.features.push(id.clone());
+        }
         match name {
             "@pattern" => self.drawn.clear(),
             "sketch.create" => {
@@ -696,6 +702,11 @@ mod guest {
                 let reply = commands::run(&name, &args.to_string())?;
                 run.record(c, &serde_json::from_str(&reply).unwrap_or(Value::Null));
             }
+            // One folder in the timeline, named like the body, holds everything the run made.
+            // The model is finished by now, so a folder that can't be made doesn't fail the run.
+            if !run.features.is_empty() {
+                let _ = commands::run("timeline.group", &json!({"name": body, "features": run.features}).to_string());
+            }
             Ok(json!({"body": body, "commands": total}).to_string())
         }
     }
@@ -706,6 +717,16 @@ mod guest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_runner_collects_what_goes_in_the_folder() {
+        let mut run = Runner::default();
+        run.record(&json!({"command": "sketch.create", "params": {"name": "S"}}), &json!({"sketch": 1}));
+        run.record(&json!({"command": "sketch.line", "params": {}}), &json!({"created": {"curves": ["l1"]}}));
+        run.record(&json!({"command": "solid.extrude", "params": {}}), &json!({"result": {"feature": 2}}));
+        run.record(&json!({"command": "parameters.add", "params": {}}), &json!({"name": "Height_units"}));
+        assert_eq!(run.features, vec![json!(1), json!(2)]);
+    }
 
     #[test]
     fn defaults_and_limits() {
