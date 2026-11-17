@@ -104,6 +104,10 @@ one undo step, editable afterwards, and they keep working without the plugin.
 |---|---|
 | ![Bins with filler](docs/images/bin-filler.png) | ![Filler section](docs/images/bin-filler-section.png) |
 
+| Cut through three bins, from left to right with 0.4, 4 and 2 mm walls (the last with a divider, scoops and label tabs): the outside and the lip are the same |
+|---|
+| ![Wall thickness](docs/images/bin-wall-section.png) |
+
 | Label text, raised (the text is its own body, shown red) | Label text, flush (inlaid) |
 |---|---|
 | ![Label text](docs/images/bin-label-text.png) | ![Flush label text](docs/images/bin-label-flush.png) |
