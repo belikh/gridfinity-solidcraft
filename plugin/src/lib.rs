@@ -196,6 +196,12 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
             _ => return Err("Label text font must be the name of an installed font, or empty for the built-in one".into()),
         },
         label_text,
+        filler: [
+            get_mm(p, "filler_left", 0.0, 0.0, MAX_FILLER)?,
+            get_mm(p, "filler_right", 0.0, 0.0, MAX_FILLER)?,
+            get_mm(p, "filler_front", 0.0, 0.0, MAX_FILLER)?,
+            get_mm(p, "filler_back", 0.0, 0.0, MAX_FILLER)?,
+        ],
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity{half} bin {nx}x{ny}x{units}"))?,
     };
@@ -933,6 +939,30 @@ mod tests {
         // no filler: the same commands as before
         let (_, a) = plan("baseplate", &json!({"width": 2})).unwrap();
         let (_, z) = plan("baseplate", &json!({"width": 2, "filler_left": 0})).unwrap();
+        assert_eq!(a, z);
+    }
+
+    #[test]
+    fn bin_filler_reaches_over_the_baseplate_filler() {
+        let o = parse_bin(&json!({"width": 2, "filler_left": 10, "filler_back": 7.5})).unwrap();
+        assert_eq!(o.filler, [10.0, 0.0, 0.0, 7.5]);
+        assert!(parse_bin(&json!({"filler_right": -1})).is_err());
+        assert!(parse_bin(&json!({"filler_front": 201})).is_err());
+        // a bin with the baseplate's filler, at the baseplate's position, sits on its grid
+        let p = json!({"width": 2, "depth": 1, "filler_left": 10, "filler_front": 5, "holes_magnet": true});
+        let (_, bin) = plan("bin", &p).unwrap();
+        let (_, plate) = plan("baseplate", &json!({"width": 2, "depth": 1, "filler_left": 10, "filler_front": 5, "holes_magnet": true})).unwrap();
+        let magnets = |c: &[Value], d: f64| -> Vec<Value> {
+            let mut v: Vec<Value> = geometry::expand(c).into_iter()
+                .filter(|v| v["command"] == "sketch.circle.center" && v["params"]["diameter"] == json!(d))
+                .map(|v| v["params"]["center"].clone()).collect();
+            v.sort_by_key(|v| v.to_string());
+            v
+        };
+        assert_eq!(magnets(&bin, 6.5), magnets(&plate, 6.5));
+        // no filler: the same commands as before
+        let (_, a) = plan("bin", &json!({"width": 2})).unwrap();
+        let (_, z) = plan("bin", &json!({"width": 2, "filler_left": 0})).unwrap();
         assert_eq!(a, z);
     }
 

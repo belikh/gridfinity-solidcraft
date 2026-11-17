@@ -3,9 +3,7 @@
  "name": "Gridfinity",
  "version": "1.1.0",
  "description": "Gridfinity bins (hollow, eco or solid for custom cutouts), baseplates and drawer baseplates split to fit your printer, on a full, half or custom grid.",
- "capabilities": [
-  "commands@0.1"
- ],
+ "capabilities": ["commands@0.1"],
  "runtime": {
   "module": "plugin.wasm",
   "entries": [
@@ -14,543 +12,94 @@
     "effect": "edit",
     "input_schema": {
      "type": "object",
-     "required": [
-      "grid",
-      "width",
-      "depth",
-      "height",
-      "inside"
-     ],
+     "required": ["grid", "width", "depth", "height", "inside"],
      "properties": {
-      "width": {
-       "type": "integer",
-       "title": "Width (cells)",
-       "description": "Cells along X (42 mm, 21 mm on the half grid, or the custom size). One run builds up to 100 cells, fewer with holes",
-       "minimum": 1,
-       "maximum": 24,
-       "default": 1
-      },
-      "depth": {
-       "type": "integer",
-       "title": "Depth (cells)",
-       "description": "Cells along Y (42 mm, 21 mm on the half grid, or the custom size). One run builds up to 100 cells, fewer with holes",
-       "minimum": 1,
-       "maximum": 24,
-       "default": 1
-      },
-      "height": {
-       "type": "integer",
-       "title": "Height (units)",
-       "description": "Height units, 7 mm each",
-       "minimum": 2,
-       "maximum": 20,
-       "default": 3
-      },
-      "dividers_x": {
-       "type": "integer",
-       "title": "Dividers across X",
-       "description": "Walls splitting the bin along X (hollow bins)",
-       "minimum": 0,
-       "maximum": 10,
-       "default": 0
-      },
-      "dividers_y": {
-       "type": "integer",
-       "title": "Dividers across Y",
-       "description": "Walls splitting the bin along Y (hollow bins)",
-       "minimum": 0,
-       "maximum": 10,
-       "default": 0
-      },
-      "inside_scoop": {
-       "type": "number",
-       "title": "Scoop",
-       "description": "Rounded floor along the front wall of each compartment, so small parts slide out. Radius in mm, 0 = none (hollow bins only)",
-       "minimum": 0,
-       "maximum": 40,
-       "default": 0,
-       "unit": "mm"
-      },
-      "inside_fill_height": {
-       "type": "number",
-       "title": "Fill height (solid)",
-       "description": "Solid bins: where the fill stops, mm from the bottom of the bin. Above it the bin is hollow, so a bin stacked on top clears what sits in your cutout. 0 = filled to the top of the walls",
-       "minimum": 0,
-       "maximum": 140,
-       "default": 0,
-       "unit": "mm"
-      },
-      "inside_label_tab": {
-       "type": "boolean",
-       "title": "Label tab",
-       "description": "A 12 mm shelf along the back wall of each compartment, at the top, for a label (hollow bins only)",
-       "default": false
-      },
-      "inside_label_text": {
-       "type": "string",
-       "title": "Label text (a; b; c)",
-       "description": "Text on the label tab, as its own body so it can be printed in another filament. One label per compartment, separated by ; (back row first, left to right), e.g. M3x6; M3x8; Washers. Each label becomes a text parameter (Label_1, Label_2, ...): change it in Parameters to relabel. Adds the label tab (hollow bins only)",
-       "maxLength": 200,
-       "default": ""
-      },
-      "inside_label_text_size": {
-       "type": "number",
-       "title": "Label text size",
-       "description": "Capital height of the label text. 0 = as big as fits on the tab",
-       "minimum": 0,
-       "maximum": 20,
-       "default": 0,
-       "unit": "mm"
-      },
-      "inside_label_text_style": {
-       "type": "string",
-       "title": "Label text style",
-       "description": "Raised: the text stands up from the tab. Flush (inlaid): it is sunk into the tab, its top level with the tab, for a flat label in two colours",
-       "enum": [
-        "Raised",
-        "Flush (inlaid)"
-       ],
-       "default": "Raised"
-      },
-      "inside_label_text_font": {
-       "type": "string",
-       "title": "Label text font",
-       "description": "An installed font, e.g. Arial, DejaVu Sans or Segoe UI. Empty = SolidCraft's built-in font. Sizes are fitted for the built-in one, so a wide font may need a smaller Label text size",
-       "maxLength": 200,
-       "default": ""
-      },
-      "inside_label_text_height": {
-       "type": "number",
-       "title": "Label text height",
-       "description": "How far the label text stands up from the tab, or how deep it is sunk in (flush), e.g. one or two layers",
-       "minimum": 0.1,
-       "maximum": 3,
-       "default": 0.4,
-       "unit": "mm"
-      },
-      "holes_magnet": {
-       "type": "boolean",
-       "title": "Magnet holes",
-       "description": "6.5 x 2.4 mm holes in every foot",
-       "default": false
-      },
-      "holes_screw": {
-       "type": "boolean",
-       "title": "Screw holes",
-       "description": "3 mm holes in every foot",
-       "default": false
-      },
-      "position_x": {
-       "type": "number",
-       "title": "Position X",
-       "description": "Corner of the bin",
-       "default": 0,
-       "unit": "mm"
-      },
-      "position_y": {
-       "type": "number",
-       "title": "Position Y",
-       "description": "Corner of the bin",
-       "default": 0,
-       "unit": "mm"
-      },
-      "stacking_lip": {
-       "type": "boolean",
-       "title": "Stacking lip",
-       "description": "Lip on top so bins stack",
-       "default": true
-      },
-      "title": {
-       "type": "string",
-       "title": "Body name",
-       "description": "Leave empty for an automatic name",
-       "maxLength": 60
-      },
-      "grid": {
-       "type": "string",
-       "title": "Grid size",
-       "description": "Full: 42 mm feet. Half: 21 mm feet, four fit in one baseplate pocket. Custom: your own cell size, set below (fits only other parts with the same size)",
-       "enum": [
-        "42 mm (full)",
-        "21 mm (half)",
-        "Custom (sizes below)"
-       ],
-       "default": "42 mm (full)"
-      },
-      "inside": {
-       "type": "string",
-       "title": "Inside",
-       "description": "Eco: 0.8 mm walls, hollow feet, less filament (no screw holes). Solid: filled, to cut your own shapes into",
-       "enum": [
-        "Hollow",
-        "Eco (thin walls, hollow feet)",
-        "Solid (for custom cutouts)"
-       ],
-       "default": "Hollow"
-      },
-      "custom_size_x": {
-       "type": "number",
-       "title": "Custom cell X",
-       "description": "Cell size along X, only used when Grid size is Custom",
-       "minimum": 15,
-       "maximum": 100,
-       "default": 42,
-       "unit": "mm"
-      },
-      "custom_size_y": {
-       "type": "number",
-       "title": "Custom cell Y",
-       "description": "Cell size along Y, only used when Grid size is Custom",
-       "minimum": 15,
-       "maximum": 100,
-       "default": 42,
-       "unit": "mm"
-      }
+      "width": {"type": "integer", "title": "Width (cells)", "description": "Cells along X (42 mm, 21 mm on the half grid, or the custom size). One run builds up to 100 cells, fewer with holes", "minimum": 1, "maximum": 24, "default": 1},
+      "depth": {"type": "integer", "title": "Depth (cells)", "description": "Cells along Y (42 mm, 21 mm on the half grid, or the custom size). One run builds up to 100 cells, fewer with holes", "minimum": 1, "maximum": 24, "default": 1},
+      "height": {"type": "integer", "title": "Height (units)", "description": "Height units, 7 mm each", "minimum": 2, "maximum": 20, "default": 3},
+      "dividers_x": {"type": "integer", "title": "Dividers across X", "description": "Walls splitting the bin along X (hollow bins)", "minimum": 0, "maximum": 10, "default": 0},
+      "dividers_y": {"type": "integer", "title": "Dividers across Y", "description": "Walls splitting the bin along Y (hollow bins)", "minimum": 0, "maximum": 10, "default": 0},
+      "inside_scoop": {"type": "number", "title": "Scoop", "description": "Rounded floor along the front wall of each compartment, so small parts slide out. Radius in mm, 0 = none (hollow bins only)", "minimum": 0, "maximum": 40, "default": 0, "unit": "mm"},
+      "inside_fill_height": {"type": "number", "title": "Fill height (solid)", "description": "Solid bins: where the fill stops, mm from the bottom of the bin. Above it the bin is hollow, so a bin stacked on top clears what sits in your cutout. 0 = filled to the top of the walls", "minimum": 0, "maximum": 140, "default": 0, "unit": "mm"},
+      "inside_label_tab": {"type": "boolean", "title": "Label tab", "description": "A 12 mm shelf along the back wall of each compartment, at the top, for a label (hollow bins only)", "default": false},
+      "inside_label_text": {"type": "string", "title": "Label text (a; b; c)", "description": "Text on the label tab, as its own body so it can be printed in another filament. One label per compartment, separated by ; (back row first, left to right), e.g. M3x6; M3x8; Washers. Each label becomes a text parameter (Label_1, Label_2, ...): change it in Parameters to relabel. Adds the label tab (hollow bins only)", "maxLength": 200, "default": ""},
+      "inside_label_text_size": {"type": "number", "title": "Label text size", "description": "Capital height of the label text. 0 = as big as fits on the tab", "minimum": 0, "maximum": 20, "default": 0, "unit": "mm"},
+      "inside_label_text_style": {"type": "string", "title": "Label text style", "description": "Raised: the text stands up from the tab. Flush (inlaid): it is sunk into the tab, its top level with the tab, for a flat label in two colours", "enum": ["Raised", "Flush (inlaid)"], "default": "Raised"},
+      "inside_label_text_font": {"type": "string", "title": "Label text font", "description": "An installed font, e.g. Arial, DejaVu Sans or Segoe UI. Empty = SolidCraft's built-in font. Sizes are fitted for the built-in one, so a wide font may need a smaller Label text size", "maxLength": 200, "default": ""},
+      "inside_label_text_height": {"type": "number", "title": "Label text height", "description": "How far the label text stands up from the tab, or how deep it is sunk in (flush), e.g. one or two layers", "minimum": 0.1, "maximum": 3, "default": 0.4, "unit": "mm"},
+      "holes_magnet": {"type": "boolean", "title": "Magnet holes", "description": "6.5 x 2.4 mm holes in every foot", "default": false},
+      "holes_screw": {"type": "boolean", "title": "Screw holes", "description": "3 mm holes in every foot", "default": false},
+      "filler_left": {"type": "number", "title": "Filler left", "description": "Wall moved out on the left (-X), over a baseplate's filler. Flat bottom there, wide ones need support. 0 = none", "minimum": 0, "maximum": 200, "default": 0, "unit": "mm"},
+      "filler_right": {"type": "number", "title": "Filler right", "description": "Wall moved out on the right (+X), over a baseplate's filler. Flat bottom there, wide ones need support. 0 = none", "minimum": 0, "maximum": 200, "default": 0, "unit": "mm"},
+      "filler_front": {"type": "number", "title": "Filler front", "description": "Wall moved out on the front (-Y), over a baseplate's filler. Flat bottom there, wide ones need support. 0 = none", "minimum": 0, "maximum": 200, "default": 0, "unit": "mm"},
+      "filler_back": {"type": "number", "title": "Filler back", "description": "Wall moved out on the back (+Y), over a baseplate's filler. Flat bottom there, wide ones need support. 0 = none", "minimum": 0, "maximum": 200, "default": 0, "unit": "mm"},
+      "position_x": {"type": "number", "title": "Position X", "description": "Corner of the bin, filler included", "default": 0, "unit": "mm"},
+      "position_y": {"type": "number", "title": "Position Y", "description": "Corner of the bin, filler included", "default": 0, "unit": "mm"},
+      "stacking_lip": {"type": "boolean", "title": "Stacking lip", "description": "Lip on top so bins stack", "default": true},
+      "title": {"type": "string", "title": "Body name", "description": "Leave empty for an automatic name", "maxLength": 60},
+      "grid": {"type": "string", "title": "Grid size", "description": "Full: 42 mm feet. Half: 21 mm feet, four fit in one baseplate pocket. Custom: your own cell size, set below (fits only other parts with the same size)", "enum": ["42 mm (full)", "21 mm (half)", "Custom (sizes below)"], "default": "42 mm (full)"},
+      "inside": {"type": "string", "title": "Inside", "description": "Eco: 0.8 mm walls, hollow feet, less filament (no screw holes). Solid: filled, to cut your own shapes into", "enum": ["Hollow", "Eco (thin walls, hollow feet)", "Solid (for custom cutouts)"], "default": "Hollow"},
+      "custom_size_x": {"type": "number", "title": "Custom cell X", "description": "Cell size along X, only used when Grid size is Custom", "minimum": 15, "maximum": 100, "default": 42, "unit": "mm"},
+      "custom_size_y": {"type": "number", "title": "Custom cell Y", "description": "Cell size along Y, only used when Grid size is Custom", "minimum": 15, "maximum": 100, "default": 42, "unit": "mm"}
      }
     },
-    "slots": [
-     {
-      "kind": "menu",
-      "name": "Gridfinity bin"
-     }
-    ]
+    "slots": [{"kind": "menu", "name": "Gridfinity bin"}]
    },
    {
     "name": "baseplate",
     "effect": "edit",
     "input_schema": {
      "type": "object",
-     "required": [
-      "grid",
-      "width",
-      "depth",
-      "bottom"
-     ],
+     "required": ["grid", "width", "depth", "bottom"],
      "properties": {
-      "width": {
-       "type": "integer",
-       "title": "Width (cells)",
-       "description": "Cells along X (42 mm, 21 mm on the half grid, or the custom size). One run builds up to 100 cells, fewer with holes",
-       "minimum": 1,
-       "maximum": 24,
-       "default": 3
-      },
-      "depth": {
-       "type": "integer",
-       "title": "Depth (cells)",
-       "description": "Cells along Y (42 mm, 21 mm on the half grid, or the custom size). One run builds up to 100 cells, fewer with holes",
-       "minimum": 1,
-       "maximum": 24,
-       "default": 3
-      },
-      "holes_magnet": {
-       "type": "boolean",
-       "title": "Magnet holes",
-       "description": "6.5 x 2.4 mm holes in every pocket (needs a solid bottom)",
-       "default": false
-      },
-      "filler_left": {
-       "type": "number",
-       "title": "Filler left",
-       "description": "Strip on the left (-X) side, to fill out a drawer (see Leftover space). 0 = none",
-       "minimum": 0,
-       "maximum": 200,
-       "default": 0,
-       "unit": "mm"
-      },
-      "filler_right": {
-       "type": "number",
-       "title": "Filler right",
-       "description": "Strip on the right (+X) side, to fill out a drawer (see Leftover space). 0 = none",
-       "minimum": 0,
-       "maximum": 200,
-       "default": 0,
-       "unit": "mm"
-      },
-      "filler_front": {
-       "type": "number",
-       "title": "Filler front",
-       "description": "Strip on the front (-Y) side, to fill out a drawer (see Leftover space). 0 = none",
-       "minimum": 0,
-       "maximum": 200,
-       "default": 0,
-       "unit": "mm"
-      },
-      "filler_back": {
-       "type": "number",
-       "title": "Filler back",
-       "description": "Strip on the back (+Y) side, to fill out a drawer (see Leftover space). 0 = none",
-       "minimum": 0,
-       "maximum": 200,
-       "default": 0,
-       "unit": "mm"
-      },
-      "leftover": {
-       "type": "string",
-       "title": "Leftover space",
-       "description": "Half cells: pockets half a cell wide and as long as the cells (21 x 42 mm), for half-width bins, where 21 mm or more is left over; the rest solid. Solid: all solid",
-       "enum": [
-        "Half cells",
-        "Solid"
-       ],
-       "default": "Half cells"
-      },
-      "position_x": {
-       "type": "number",
-       "title": "Position X",
-       "description": "Corner of the baseplate",
-       "default": 0,
-       "unit": "mm"
-      },
-      "position_y": {
-       "type": "number",
-       "title": "Position Y",
-       "description": "Corner of the baseplate",
-       "default": 0,
-       "unit": "mm"
-      },
-      "title": {
-       "type": "string",
-       "title": "Body name",
-       "description": "Leave empty for an automatic name",
-       "maxLength": 60
-      },
-      "grid": {
-       "type": "string",
-       "title": "Grid size",
-       "description": "Full: 42 mm pockets. Half: 21 mm pockets. Custom: your own cell size, set below (fits only other parts with the same size)",
-       "enum": [
-        "42 mm (full)",
-        "21 mm (half)",
-        "Custom (sizes below)"
-       ],
-       "default": "42 mm (full)"
-      },
-      "bottom": {
-       "type": "string",
-       "title": "Bottom",
-       "description": "Solid floor, or just the frame (lighter, no magnet holes)",
-       "enum": [
-        "Solid",
-        "Open (frame only)"
-       ],
-       "default": "Solid"
-      },
-      "custom_size_x": {
-       "type": "number",
-       "title": "Custom cell X",
-       "description": "Cell size along X, only used when Grid size is Custom",
-       "minimum": 15,
-       "maximum": 100,
-       "default": 42,
-       "unit": "mm"
-      },
-      "custom_size_y": {
-       "type": "number",
-       "title": "Custom cell Y",
-       "description": "Cell size along Y, only used when Grid size is Custom",
-       "minimum": 15,
-       "maximum": 100,
-       "default": 42,
-       "unit": "mm"
-      }
+      "width": {"type": "integer", "title": "Width (cells)", "description": "Cells along X (42 mm, 21 mm on the half grid, or the custom size). One run builds up to 100 cells, fewer with holes", "minimum": 1, "maximum": 24, "default": 3},
+      "depth": {"type": "integer", "title": "Depth (cells)", "description": "Cells along Y (42 mm, 21 mm on the half grid, or the custom size). One run builds up to 100 cells, fewer with holes", "minimum": 1, "maximum": 24, "default": 3},
+      "holes_magnet": {"type": "boolean", "title": "Magnet holes", "description": "6.5 x 2.4 mm holes in every pocket (needs a solid bottom)", "default": false},
+      "filler_left": {"type": "number", "title": "Filler left", "description": "Strip on the left (-X) side, to fill out a drawer (see Leftover space). 0 = none", "minimum": 0, "maximum": 200, "default": 0, "unit": "mm"},
+      "filler_right": {"type": "number", "title": "Filler right", "description": "Strip on the right (+X) side, to fill out a drawer (see Leftover space). 0 = none", "minimum": 0, "maximum": 200, "default": 0, "unit": "mm"},
+      "filler_front": {"type": "number", "title": "Filler front", "description": "Strip on the front (-Y) side, to fill out a drawer (see Leftover space). 0 = none", "minimum": 0, "maximum": 200, "default": 0, "unit": "mm"},
+      "filler_back": {"type": "number", "title": "Filler back", "description": "Strip on the back (+Y) side, to fill out a drawer (see Leftover space). 0 = none", "minimum": 0, "maximum": 200, "default": 0, "unit": "mm"},
+      "leftover": {"type": "string", "title": "Leftover space", "description": "Half cells: pockets half a cell wide and as long as the cells (21 x 42 mm), for half-width bins, where 21 mm or more is left over; the rest solid. Solid: all solid", "enum": ["Half cells", "Solid"], "default": "Half cells"},
+      "position_x": {"type": "number", "title": "Position X", "description": "Corner of the baseplate", "default": 0, "unit": "mm"},
+      "position_y": {"type": "number", "title": "Position Y", "description": "Corner of the baseplate", "default": 0, "unit": "mm"},
+      "title": {"type": "string", "title": "Body name", "description": "Leave empty for an automatic name", "maxLength": 60},
+      "grid": {"type": "string", "title": "Grid size", "description": "Full: 42 mm pockets. Half: 21 mm pockets. Custom: your own cell size, set below (fits only other parts with the same size)", "enum": ["42 mm (full)", "21 mm (half)", "Custom (sizes below)"], "default": "42 mm (full)"},
+      "bottom": {"type": "string", "title": "Bottom", "description": "Solid floor, or just the frame (lighter, no magnet holes)", "enum": ["Solid", "Open (frame only)"], "default": "Solid"},
+      "custom_size_x": {"type": "number", "title": "Custom cell X", "description": "Cell size along X, only used when Grid size is Custom", "minimum": 15, "maximum": 100, "default": 42, "unit": "mm"},
+      "custom_size_y": {"type": "number", "title": "Custom cell Y", "description": "Cell size along Y, only used when Grid size is Custom", "minimum": 15, "maximum": 100, "default": 42, "unit": "mm"}
      }
     },
-    "slots": [
-     {
-      "kind": "menu",
-      "name": "Gridfinity baseplate"
-     }
-    ]
+    "slots": [{"kind": "menu", "name": "Gridfinity baseplate"}]
    },
    {
     "name": "drawer",
     "effect": "edit",
     "input_schema": {
      "type": "object",
-     "required": [
-      "drawer_width",
-      "drawer_depth",
-      "printer_x",
-      "printer_y",
-      "grid",
-      "bottom"
-     ],
+     "required": ["drawer_width", "drawer_depth", "printer_x", "printer_y", "grid", "bottom"],
      "properties": {
-      "drawer_width": {
-       "type": "number",
-       "title": "Drawer width",
-       "description": "Inside width of the drawer (along X)",
-       "minimum": 15,
-       "maximum": 1000,
-       "default": 300,
-       "unit": "mm"
-      },
-      "drawer_depth": {
-       "type": "number",
-       "title": "Drawer depth",
-       "description": "Inside depth of the drawer (along Y)",
-       "minimum": 15,
-       "maximum": 1000,
-       "default": 300,
-       "unit": "mm"
-      },
-      "printer_x": {
-       "type": "number",
-       "title": "Printer bed X",
-       "description": "Largest piece your printer can print along X",
-       "minimum": 50,
-       "maximum": 1000,
-       "default": 256,
-       "unit": "mm"
-      },
-      "printer_y": {
-       "type": "number",
-       "title": "Printer bed Y",
-       "description": "Largest piece your printer can print along Y",
-       "minimum": 50,
-       "maximum": 1000,
-       "default": 256,
-       "unit": "mm"
-      },
-      "filler_x": {
-       "type": "string",
-       "title": "Filler along X",
-       "description": "Where the space left over beside the cells goes",
-       "enum": [
-        "Even (both sides)",
-        "Left",
-        "Right"
-       ],
-       "default": "Even (both sides)"
-      },
-      "filler_y": {
-       "type": "string",
-       "title": "Filler along Y",
-       "description": "Where the space left over in front of and behind the cells goes",
-       "enum": [
-        "Even (both sides)",
-        "Front",
-        "Back"
-       ],
-       "default": "Even (both sides)"
-      },
-      "leftover": {
-       "type": "string",
-       "title": "Leftover space",
-       "description": "Half cells: a row of pockets half a cell wide and as long as the cells (21 x 42 mm), for half-width bins, where 21 mm or more is left over (on the side Filler names; for Even, right and back); the rest solid. Solid: all solid",
-       "enum": [
-        "Half cells",
-        "Solid"
-       ],
-       "default": "Half cells"
-      },
-      "grid": {
-       "type": "string",
-       "title": "Grid size",
-       "description": "Full: 42 mm pockets. Half: 21 mm pockets. Custom: your own cell size, set below",
-       "enum": [
-        "42 mm (full)",
-        "21 mm (half)",
-        "Custom (sizes below)"
-       ],
-       "default": "42 mm (full)"
-      },
-      "custom_size_x": {
-       "type": "number",
-       "title": "Custom cell X",
-       "description": "Cell size along X, only used when Grid size is Custom",
-       "minimum": 15,
-       "maximum": 100,
-       "default": 42,
-       "unit": "mm"
-      },
-      "custom_size_y": {
-       "type": "number",
-       "title": "Custom cell Y",
-       "description": "Cell size along Y, only used when Grid size is Custom",
-       "minimum": 15,
-       "maximum": 100,
-       "default": 42,
-       "unit": "mm"
-      },
-      "bottom": {
-       "type": "string",
-       "title": "Bottom",
-       "description": "Solid floor, or just the frame (lighter, no magnet holes)",
-       "enum": [
-        "Solid",
-        "Open (frame only)"
-       ],
-       "default": "Solid"
-      },
-      "holes_magnet": {
-       "type": "boolean",
-       "title": "Magnet holes",
-       "description": "6.5 x 2.4 mm holes in every pocket (needs a solid bottom)",
-       "default": false
-      },
-      "position_x": {
-       "type": "number",
-       "title": "Position X",
-       "description": "Corner of the first piece",
-       "default": 0,
-       "unit": "mm"
-      },
-      "position_y": {
-       "type": "number",
-       "title": "Position Y",
-       "description": "Corner of the first piece",
-       "default": 0,
-       "unit": "mm"
-      },
-      "title": {
-       "type": "string",
-       "title": "Body name",
-       "description": "Leave empty for an automatic name",
-       "maxLength": 60
-      },
-      "piece": {
-       "type": "integer",
-       "title": "Piece (0 = all)",
-       "description": "Build just one piece (numbered along X, then Y). Big drawers take longer than SolidCraft allows a plugin, so build them one piece at a time",
-       "minimum": 0,
-       "maximum": 99,
-       "default": 0
-      }
+      "drawer_width": {"type": "number", "title": "Drawer width", "description": "Inside width of the drawer (along X)", "minimum": 15, "maximum": 1000, "default": 300, "unit": "mm"},
+      "drawer_depth": {"type": "number", "title": "Drawer depth", "description": "Inside depth of the drawer (along Y)", "minimum": 15, "maximum": 1000, "default": 300, "unit": "mm"},
+      "printer_x": {"type": "number", "title": "Printer bed X", "description": "Largest piece your printer can print along X", "minimum": 50, "maximum": 1000, "default": 256, "unit": "mm"},
+      "printer_y": {"type": "number", "title": "Printer bed Y", "description": "Largest piece your printer can print along Y", "minimum": 50, "maximum": 1000, "default": 256, "unit": "mm"},
+      "filler_x": {"type": "string", "title": "Filler along X", "description": "Where the space left over beside the cells goes", "enum": ["Even (both sides)", "Left", "Right"], "default": "Even (both sides)"},
+      "filler_y": {"type": "string", "title": "Filler along Y", "description": "Where the space left over in front of and behind the cells goes", "enum": ["Even (both sides)", "Front", "Back"], "default": "Even (both sides)"},
+      "leftover": {"type": "string", "title": "Leftover space", "description": "Half cells: a row of pockets half a cell wide and as long as the cells (21 x 42 mm), for half-width bins, where 21 mm or more is left over (on the side Filler names; for Even, right and back); the rest solid. Solid: all solid", "enum": ["Half cells", "Solid"], "default": "Half cells"},
+      "grid": {"type": "string", "title": "Grid size", "description": "Full: 42 mm pockets. Half: 21 mm pockets. Custom: your own cell size, set below", "enum": ["42 mm (full)", "21 mm (half)", "Custom (sizes below)"], "default": "42 mm (full)"},
+      "custom_size_x": {"type": "number", "title": "Custom cell X", "description": "Cell size along X, only used when Grid size is Custom", "minimum": 15, "maximum": 100, "default": 42, "unit": "mm"},
+      "custom_size_y": {"type": "number", "title": "Custom cell Y", "description": "Cell size along Y, only used when Grid size is Custom", "minimum": 15, "maximum": 100, "default": 42, "unit": "mm"},
+      "bottom": {"type": "string", "title": "Bottom", "description": "Solid floor, or just the frame (lighter, no magnet holes)", "enum": ["Solid", "Open (frame only)"], "default": "Solid"},
+      "holes_magnet": {"type": "boolean", "title": "Magnet holes", "description": "6.5 x 2.4 mm holes in every pocket (needs a solid bottom)", "default": false},
+      "position_x": {"type": "number", "title": "Position X", "description": "Corner of the first piece", "default": 0, "unit": "mm"},
+      "position_y": {"type": "number", "title": "Position Y", "description": "Corner of the first piece", "default": 0, "unit": "mm"},
+      "title": {"type": "string", "title": "Body name", "description": "Leave empty for an automatic name", "maxLength": 60},
+      "piece": {"type": "integer", "title": "Piece (0 = all)", "description": "Build just one piece (numbered along X, then Y). Big drawers take longer than SolidCraft allows a plugin, so build them one piece at a time", "minimum": 0, "maximum": 99, "default": 0}
      }
     },
-    "slots": [
-     {
-      "kind": "menu",
-      "name": "Gridfinity drawer baseplate"
-     }
-    ]
+    "slots": [{"kind": "menu", "name": "Gridfinity drawer baseplate"}]
    }
   ],
-  "commands": [
-   "sketch.create",
-   "sketch.rectangle.rounded",
-   "sketch.circle.center",
-   "sketch.finish",
-   "solid.extrude",
-   "solid.box",
-   "sketch.line",
-   "sketch.pattern.rectangular",
-   "solid.move",
-   "solid.pattern.rectangular",
-   "solid.combine",
-   "sketch.rectangle.two_point",
-   "sketch.text",
-   "parameters.add",
-   "parameters.list",
-   "model.body_features",
-   "timeline.group"
-  ],
-  "limits": {
-   "fuel": 2000000000,
-   "memory_mib": 64,
-   "deadline_ms": 30000
-  }
+  "commands": ["sketch.create", "sketch.rectangle.rounded", "sketch.circle.center", "sketch.finish", "solid.extrude", "solid.box", "sketch.line", "sketch.pattern.rectangular", "solid.move", "solid.pattern.rectangular", "solid.combine", "sketch.rectangle.two_point", "sketch.text", "parameters.add", "parameters.list", "model.body_features", "timeline.group"],
+  "limits": {"fuel": 2000000000, "memory_mib": 64, "deadline_ms": 30000}
  }
 }

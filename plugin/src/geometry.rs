@@ -77,6 +77,10 @@ pub struct BinOptions {
     pub flush: bool,
     /// Font of the label text: an installed family or a font file ("": the built-in font).
     pub font: String,
+    /// Wall moved out past the grid on the left, right, front and back (mm), so the bin reaches
+    /// over a baseplate's filler. The part outside the grid has a flat bottom instead of feet.
+    pub filler: [f64; 4],
+    /// The bin's corner, filler included.
     pub origin: [f64; 2],
     pub name: String,
 }
@@ -105,6 +109,18 @@ impl BinOptions {
     /// The top of the inside at the height scoops and label tabs are sized for.
     fn sized_top(&self) -> f64 {
         inside_top(self.sized_units, self.lip, self.wall())
+    }
+
+    /// Corner of the grid the feet stand on: past the filler on the left and front.
+    pub(crate) fn grid_corner(&self) -> [f64; 2] {
+        [self.origin[0] + self.filler[0], self.origin[1] + self.filler[2]]
+    }
+
+    /// The bin's outline, filler included: centre x, y and size w, d.
+    pub(crate) fn outline(&self) -> (f64, f64, f64, f64) {
+        let [fl, fr, ff, fb] = self.filler;
+        let (gw, gd) = (self.pitch[0] * self.nx as f64 + fl + fr, self.pitch[1] * self.ny as f64 + ff + fb);
+        (self.origin[0] + gw / 2.0, self.origin[1] + gd / 2.0, gw - GAP, gd - GAP)
     }
 }
 
@@ -138,11 +154,10 @@ pub(crate) fn text_width(s: &str, h: f64) -> f64 {
 /// Where label text goes: for each compartment, back row first and left to right, the middle
 /// of the part of its tab that can be seen from above (x, y) and that part's width and depth.
 pub fn label_areas(o: &BinOptions) -> Vec<(f64, f64, f64, f64)> {
-    let w = o.pitch[0] * o.nx as f64 - GAP;
-    let d = o.pitch[1] * o.ny as f64 - GAP;
+    let (cx, cy, w, d) = o.outline();
     let wall = o.wall();
     let (iw, id) = (w - 2.0 * wall, d - 2.0 * wall);
-    let (x0, y0) = (o.origin[0] + GAP / 2.0 + wall, o.origin[1] + GAP / 2.0 + wall);
+    let (x0, y0) = (cx - w / 2.0 + wall, cy - d / 2.0 + wall);
     let rows = o.div_y + 1;
     let cols = o.div_x + 1;
     let depth = id / rows as f64 - if rows > 1 { DIVIDER / 2.0 } else { 0.0 };
@@ -335,13 +350,12 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     let (sx_top, sy_top) = (px - GAP, py - GAP);
     let (sx_mid, sy_mid, r_mid) = (sx_top - 2.0 * c, sy_top - 2.0 * c, r_bottom + a);
     let foot_h = a + m + c;
-    let w = px * o.nx as f64 - GAP;
-    let d = py * o.ny as f64 - GAP;
-    let cx = o.origin[0] + px * o.nx as f64 / 2.0;
-    let cy = o.origin[1] + py * o.ny as f64 / 2.0;
+    // the block reaches over any filler; the feet stay on the grid
+    let (cx, cy, w, d) = o.outline();
+    let grid = o.grid_corner();
     let height = UNIT_H * o.units as f64;
     let block_top = height + if o.lip { LIP.0 + LIP.1 + LIP.2 - LIP_FLAT } else { 0.0 };
-    let blk = Block { corner: o.origin, nx: o.nx, ny: o.ny, pitch };
+    let blk = Block { corner: grid, nx: o.nx, ny: o.ny, pitch };
     let (wall, floor) = (o.wall(), o.floor());
 
     sketch(&mut out, foot_h, &n("Body"), vec![rrect(cx, cy, w, d, top)]);
@@ -466,7 +480,7 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
 
     // Screw holes reach above the feet into the block: that part is cut now, while it is simple.
     if o.screws && SCREW_DEPTH > foot_h {
-        sketch(&mut out, foot_h, &n("Screws above"), block_holes(blk, o.origin, SCREW_D));
+        sketch(&mut out, foot_h, &n("Screws above"), block_holes(blk, grid, SCREW_D));
         out.push(extrude(&n("Screws above"), SCREW_DEPTH - foot_h, Op::Cut(b), None, "positive"));
     }
 
@@ -484,11 +498,11 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     let same_holes = pitch[0] != HALF_PITCH && pitch[1] != HALF_PITCH;
     let holes = |out: &mut Vec<Value>, target: &str, blk: Block| {
         if o.magnets {
-            sketch(out, 0.0, &n("Magnets"), block_holes(blk, o.origin, MAGNET_D));
+            sketch(out, 0.0, &n("Magnets"), block_holes(blk, grid, MAGNET_D));
             out.push(extrude(&n("Magnets"), MAGNET_DEPTH, Op::Cut(target), None, "positive"));
         }
         if o.screws {
-            sketch(out, 0.0, &n("Screws"), block_holes(blk, o.origin, SCREW_D));
+            sketch(out, 0.0, &n("Screws"), block_holes(blk, grid, SCREW_D));
             out.push(extrude(&n("Screws"), SCREW_DEPTH.min(foot_h), Op::Cut(target), None, "positive"));
         }
     };
@@ -708,7 +722,7 @@ mod tests {
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
         BinOptions { nx, ny, pitch: [PITCH; 2], units, sized_units: units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, eco: false, fill: 0.0, scoop: 0.0, label: false,
-            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(),
+            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(), filler: [0.0; 4],
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 
@@ -732,6 +746,26 @@ mod tests {
 
     // The shapes themselves were checked in SolidCraft: the volumes in gen/volumes.json match
     // the reference generator's to the micrometre. These tests pin the way they are built.
+
+    #[test]
+    fn filler_widens_the_bin_but_not_its_feet() {
+        let o = BinOptions { filler: [10.0, 4.0, 0.0, 6.0], div_x: 0, ..bin(2, 1, 3) };
+        let c = bin_commands(&o);
+        // the block: 84 + 10 + 4 wide and 42 + 6 deep, less the gap, from the corner of the filler
+        assert_eq!(c[1]["params"], json!({"p0": [0.25, 0.25], "p1": [97.75, 47.75], "radius": 3.75}));
+        // the cavity follows it
+        let cav = c.iter().position(|v| v["params"]["name"] == "Bin Cavity").unwrap();
+        assert_eq!(c[cav + 1]["params"]["p0"], json!([1.2, 1.2]));
+        // the first foot is still under the first cell of the grid, which starts past the filler
+        let feet3 = c.iter().position(|v| v["params"]["name"] == "Bin Feet3").unwrap();
+        assert_eq!(c[feet3 + 1]["params"]["p0"], json!([10.25, 0.25]));
+        assert_eq!(body_pattern(&c), Some((2, 1)));
+        // label tabs span the whole inside
+        let l = BinOptions { label: true, ..o.clone() };
+        let a = label_areas(&l);
+        assert_eq!(a.len(), 1);
+        assert!((a[0].0 - 49.0).abs() < 1e-9 && (a[0].2 - (97.5 - 1.9 - 2.0)).abs() < 1e-9);
+    }
 
     #[test]
     fn bin_is_block_then_one_foot_repeated() {
