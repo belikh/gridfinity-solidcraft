@@ -80,6 +80,8 @@ pub struct BinOptions {
     /// Wall moved out past the grid on the left, right, front and back (mm), so the bin reaches
     /// over a baseplate's filler. The part outside the grid has a flat bottom instead of feet.
     pub filler: [f64; 4],
+    /// Wall thickness (mm), inward from the outside (0: WALL, or ECO_WALL for eco bins).
+    pub wall: f64,
     /// The bin's corner, filler included.
     pub origin: [f64; 2],
     pub name: String,
@@ -87,18 +89,24 @@ pub struct BinOptions {
 
 /// Height of the inside of a bin above its floor: the highest a solid bin's fill can stop below
 /// the walls (mm from the bottom of the bin).
-pub fn bin_inside_top(units: u32, lip: bool) -> f64 {
-    inside_top(units, lip, WALL)
+pub fn bin_inside_top(units: u32, lip: bool, wall: f64) -> f64 {
+    inside_top(units, lip, bin_wall(false, wall))
+}
+
+/// The wall a bin gets: the one asked for, or the standard one (0).
+pub fn bin_wall(eco: bool, wall: f64) -> f64 {
+    if wall > 0.0 { wall } else if eco { ECO_WALL } else { WALL }
 }
 
 fn inside_top(units: u32, lip: bool, wall: f64) -> f64 {
     let height = UNIT_H * units as f64;
-    if lip { height - LIP_SUPPORT - (LIP.0 + LIP.2 - wall) } else { height }
+    // a wall thicker than the lip has no slope under the lip support, just a ledge
+    if lip { height - LIP_SUPPORT - (LIP.0 + LIP.2 - wall).max(0.0) } else { height }
 }
 
 impl BinOptions {
     fn wall(&self) -> f64 {
-        if self.eco { ECO_WALL } else { WALL }
+        bin_wall(self.eco, self.wall)
     }
 
     /// Top of the floor inside the bin: an eco bin's thin floor lies right on its feet.
@@ -166,7 +174,7 @@ pub fn label_areas(o: &BinOptions) -> Vec<(f64, f64, f64, f64)> {
     for k in (0..rows).rev() {
         let hi = y0 + id * (k + 1) as f64 / rows as f64 - if k + 1 < rows { DIVIDER / 2.0 } else { 0.0 };
         // the lip hangs over the back of the last row's tab
-        let hidden = if k + 1 == rows && o.lip { LIP.0 + LIP.2 - wall } else { 0.0 };
+        let hidden = if k + 1 == rows && o.lip { (LIP.0 + LIP.2 - wall).max(0.0) } else { 0.0 };
         // under the tab's front edge the 45° underside leaves it thin: sunk text keeps its depth
         // plus the margin of tab under it
         let thin = if o.flush { o.text_height } else { 0.0 };
@@ -387,16 +395,18 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
             out.push(extrude(&n("Support1"), LIP_SUPPORT, Op::Cut(b), None, "negative"));
             z -= LIP_SUPPORT;
             let slope = tip - wall;
-            sketch(&mut out, z, &n("Support2"), vec![rrect(cx, cy, w - 2.0 * tip, d - 2.0 * tip, top - tip)]);
-            out.push(extrude(&n("Support2"), slope, Op::Cut(b), Some(45.0), "negative"));
-            z -= slope;
+            if slope > 0.0 {
+                sketch(&mut out, z, &n("Support2"), vec![rrect(cx, cy, w - 2.0 * tip, d - 2.0 * tip, top - tip)]);
+                out.push(extrude(&n("Support2"), slope, Op::Cut(b), Some(45.0), "negative"));
+                z -= slope;
+            }
         }
     } else {
         z = height;
     }
     if pocket {
         let bottom = if hollow { floor } else { o.fill };
-        sketch(&mut out, z, &n("Cavity"), vec![rrect(cx, cy, w - 2.0 * wall, d - 2.0 * wall, top - wall)]);
+        sketch(&mut out, z, &n("Cavity"), vec![rrect(cx, cy, w - 2.0 * wall, d - 2.0 * wall, (top - wall).max(0.2))]);
         out.push(extrude(&n("Cavity"), z - bottom, Op::Cut(b), None, "negative"));
     }
     // Eco bins: where the feet stay solid under the floor, so dividers and scoops stand on
@@ -590,6 +600,19 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
             cut["params"]["targets"] = pockets.clone();
             out.push(cut);
         }
+        // a wall thicker than the feet's shell stands on solid feet: the pockets stop at its inside
+        if wall > ECO_WALL {
+            let (iw, id) = (w - 2.0 * wall, d - 2.0 * wall);
+            let edge = n("Solid edge");
+            sketch(&mut out, -1.0, &edge, vec![
+                rrect(cx, cy, iw, id, (top - wall).max(0.2)),
+                cmd("sketch.rectangle.two_point", json!({"p0": [r4(cx - w / 2.0 - 5.0), r4(cy - d / 2.0 - 5.0)], "p1": [r4(cx + w / 2.0 + 5.0), r4(cy + d / 2.0 + 5.0)]})),
+            ]);
+            let mut cut = extrude(&edge, floor + 2.0, Op::Cut(&pocket), None, "positive");
+            cut["params"]["targets"] = pockets.clone();
+            cut["params"]["profiles"] = json!([{"point": [r4(cx - w / 2.0 - 2.5), r4(cy)]}]);
+            out.push(cut);
+        }
         out.push(cmd("solid.combine", json!({"target": b, "tools": pockets, "operation": "cut"})));
     }
 
@@ -722,7 +745,7 @@ mod tests {
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
         BinOptions { nx, ny, pitch: [PITCH; 2], units, sized_units: units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, eco: false, fill: 0.0, scoop: 0.0, label: false,
-            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(), filler: [0.0; 4],
+            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(), filler: [0.0; 4], wall: 0.0,
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 
@@ -765,6 +788,28 @@ mod tests {
         let a = label_areas(&l);
         assert_eq!(a.len(), 1);
         assert!((a[0].0 - 49.0).abs() < 1e-9 && (a[0].2 - (97.5 - 1.9 - 2.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn thicker_wall_moves_the_inside_in() {
+        let o = BinOptions { wall: 2.0, div_x: 0, ..bin(1, 1, 3) };
+        let c = bin_commands(&o);
+        let cav = c.iter().position(|v| v["params"]["name"] == "Bin Cavity").unwrap();
+        assert_eq!(c[cav + 1]["params"]["p0"], json!([2.25, 2.25]));
+        // the outside and the feet stay the same
+        let d = bin_commands(&BinOptions { div_x: 0, ..bin(1, 1, 3) });
+        assert_eq!(c[1], d[1]);
+        let feet3 = |c: &[Value]| c[c.iter().position(|v| v["params"]["name"] == "Bin Feet3").unwrap() + 1].clone();
+        assert_eq!(feet3(&c), feet3(&d));
+        // a wall thicker than the lip: a ledge under the lip support instead of the slope
+        let t = bin_commands(&BinOptions { wall: 4.0, ..o.clone() });
+        assert!(!t.iter().any(|v| v["params"]["name"] == "Bin Support2"));
+        assert!(c.iter().any(|v| v["params"]["name"] == "Bin Support2"));
+        assert_eq!(inside_top(3, true, 4.0), 21.0 - LIP_SUPPORT);
+        // eco bins keep their feet solid under a thick wall
+        let e = bin_commands(&BinOptions { eco: true, ..o.clone() });
+        assert!(e.iter().any(|v| v["params"]["name"] == "Bin Solid edge"));
+        assert!(!bin_commands(&BinOptions { eco: true, wall: 0.0, ..o.clone() }).iter().any(|v| v["params"]["name"] == "Bin Solid edge"));
     }
 
     #[test]

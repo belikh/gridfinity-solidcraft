@@ -6,7 +6,7 @@ pub mod geometry;
 pub mod plate;
 
 use drawer::{drawer_commands, DrawerOptions, Filler};
-use geometry::{baseplate_commands, bin_commands, bin_inside_top, label_areas, label_size, text_depth, text_width, BaseplateOptions, BinOptions, FLOOR_Z, HALF_PITCH, PITCH, UNIT_H};
+use geometry::{baseplate_commands, bin_commands, bin_inside_top, bin_wall, label_areas, label_size, text_depth, text_width, BaseplateOptions, BinOptions, FLOOR_Z, HALF_PITCH, PITCH, UNIT_H};
 use serde_json::{Map, Value};
 use serde_json::json;
 
@@ -145,13 +145,18 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         Some(Value::String(s)) if s.to_ascii_lowercase().starts_with("eco") => (false, true),
         _ => return Err("inside must be \"Hollow\", \"Eco (thin walls, hollow feet)\" or \"Solid (for custom cutouts)\"".into()),
     };
+    // 0: the standard wall
+    let wall = get_mm(p, "inside_wall", 0.0, 0.0, MAX_WALL)?;
+    if wall > 0.0 && wall < MIN_WALL {
+        return Err(format!("Wall thickness must be from {MIN_WALL} to {MAX_WALL} mm, or 0 for the standard wall."));
+    }
     // only a solid bin has a fill; 0 fills it to the top of the walls
     let mut fill = get_mm(p, "inside_fill_height", 0.0, 0.0, UNIT_H * MAX_UNITS as f64)?;
     if !solid {
         fill = 0.0;
     }
     // leave at least 1 mm of wall above the fill
-    let max_fill = ((bin_inside_top(units, lip) - 1.0) * 100.0).round() / 100.0;
+    let max_fill = ((bin_inside_top(units, lip, wall) - 1.0) * 100.0).round() / 100.0;
     if fill > 0.0 && !(FLOOR_Z..=max_fill).contains(&fill) {
         return Err(format!("Fill height must be from {FLOOR_Z} to {max_fill} mm for a {units}-unit bin{}, or 0 to fill it to the top.",
             if lip { "" } else { " without stacking lip" }));
@@ -202,9 +207,18 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
             get_mm(p, "filler_front", 0.0, 0.0, MAX_FILLER)?,
             get_mm(p, "filler_back", 0.0, 0.0, MAX_FILLER)?,
         ],
+        wall,
         origin: get_origin(p)?,
         name: get_name(p, &format!("Gridfinity{half} bin {nx}x{ny}x{units}"))?,
     };
+    // a thick wall keeps some room inside, also in each compartment
+    let inside = |cells: u32, pitch: f64, filler: f64, div: u32| {
+        (pitch * cells as f64 + filler - 0.5 - 2.0 * bin_wall(eco, wall)) / (div + 1) as f64
+    };
+    let room = inside(nx, pitch[0], o.filler[0] + o.filler[1], o.div_x).min(inside(ny, pitch[1], o.filler[2] + o.filler[3], o.div_y));
+    if wall > 0.0 && room < 5.0 {
+        return Err(format!("A {wall} mm wall leaves too little room inside: use a thinner wall, a bigger bin, or fewer dividers."));
+    }
     if eco && o.screws {
         return Err("An eco bin has hollow feet, with no room for screw holes: turn Screw holes off, or choose Inside \"Hollow\".".into());
     }
@@ -322,6 +336,9 @@ const MAX_SCOOP_COMPARTMENTS: u32 = 36;
 
 /// Widest filler on one side of a baseplate (mm).
 const MAX_FILLER: f64 = 200.0;
+/// Bin walls: one line of a 0.4 mm nozzle, up to a thick wall.
+const MIN_WALL: f64 = 0.4;
+const MAX_WALL: f64 = 5.0;
 
 /// Largest drawer side (mm).
 const MAX_DRAWER: f64 = 1000.0;
@@ -966,6 +983,23 @@ mod tests {
         assert_eq!(a, z);
     }
 
+    #[test]
+    fn bin_wall_thickness() {
+        assert_eq!(parse_bin(&json!({"inside_wall": 2.5})).unwrap().wall, 2.5);
+        assert!(parse_bin(&json!({"inside_wall": 0.3})).unwrap_err().contains("Wall thickness"));
+        assert!(parse_bin(&json!({"inside_wall": 5.1})).is_err());
+        // too little room left, in the bin or in a compartment
+        assert!(parse_bin(&json!({"grid": "Custom", "custom_size_x": 15, "inside_wall": 5})).unwrap_err().contains("too little room"));
+        assert!(parse_bin(&json!({"inside_wall": 3, "dividers_x": 7})).unwrap_err().contains("too little room"));
+        assert!(parse_bin(&json!({"inside_wall": 3, "dividers_x": 3})).is_ok());
+        // a thicker wall lets the fill go higher under the lip
+        assert!(bin_inside_top(6, true, 2.6) > bin_inside_top(6, true, 0.0));
+        // 0: the same commands as before
+        let (_, a) = plan("bin", &json!({"width": 2})).unwrap();
+        let (_, z) = plan("bin", &json!({"width": 2, "inside_wall": 0})).unwrap();
+        assert_eq!(a, z);
+    }
+
     /// The value of a number, or of a `{Height_units} * s mm + a mm` expression at `units`.
     fn height_at(v: &Value, units: f64) -> f64 {
         if let Some(n) = v.as_f64() {
@@ -1136,7 +1170,7 @@ mod tests {
         // on: a cavity cut down to the fill, under the lip support
         let (_, c) = plan("bin", &json!({"inside": solid, "height": 6, "inside_fill_height": 20})).unwrap();
         let cav = c.iter().find(|v| v["command"] == "solid.extrude" && v["params"]["sketch"].as_str().unwrap().ends_with("Cavity")).unwrap();
-        let top = bin_inside_top(6, true);
+        let top = bin_inside_top(6, true, 0.0);
         assert!((height_at(&cav["params"]["distance"], 6.0) - (top - 20.0)).abs() < 1e-6);
         assert!(c.iter().any(|v| v["params"]["sketch"].as_str().map_or(false, |s| s.ends_with("Support1"))));
         assert!(!c.iter().any(|v| v["command"] == "solid.box"));

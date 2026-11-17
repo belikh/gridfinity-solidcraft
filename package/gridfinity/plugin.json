@@ -1,7 +1,7 @@
 {
  "id": "gridfinity",
  "name": "Gridfinity",
- "version": "1.2.0",
+ "version": "1.2.1",
  "description": "Gridfinity bins (hollow, eco or solid for custom cutouts), baseplates and drawer baseplates split to fit your printer, on a full, half or custom grid.",
  "capabilities": ["commands@0.1"],
  "runtime": {
@@ -27,6 +27,7 @@
       "inside_label_text_style": {"type": "string", "title": "Label text style", "description": "Raised: the text stands up from the tab. Flush (inlaid): it is sunk into the tab, its top level with the tab, for a flat label in two colours", "enum": ["Raised", "Flush (inlaid)"], "default": "Raised"},
       "inside_label_text_font": {"type": "string", "title": "Label text font", "description": "An installed font, e.g. Arial, DejaVu Sans or Segoe UI. Empty = SolidCraft's built-in font. Sizes are fitted for the built-in one, so a wide font may need a smaller Label text size", "maxLength": 200, "default": ""},
       "inside_label_text_height": {"type": "number", "title": "Label text height", "description": "How far the label text stands up from the tab, or how deep it is sunk in (flush), e.g. one or two layers", "minimum": 0.1, "maximum": 3, "default": 0.4, "unit": "mm"},
+      "inside_wall": {"type": "number", "title": "Wall thickness", "description": "Thicker or thinner walls, inward: the outside stays the same. 0.4 to 5 mm, 0 = standard (0.95, eco 0.8)", "minimum": 0, "maximum": 5, "default": 0, "unit": "mm"},
       "holes_magnet": {"type": "boolean", "title": "Magnet holes", "description": "6.5 x 2.4 mm holes in every foot", "default": false},
       "holes_screw": {"type": "boolean", "title": "Screw holes", "description": "3 mm holes in every foot", "default": false},
       "filler_left": {"type": "number", "title": "Filler left", "description": "Wall moved out on the left (-X), over a baseplate's filler. Flat bottom there, wide ones need support. 0 = none", "minimum": 0, "maximum": 200, "default": 0, "unit": "mm"},
