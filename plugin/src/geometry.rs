@@ -93,6 +93,12 @@ pub fn bin_inside_top(units: u32, lip: bool, wall: f64) -> f64 {
     inside_top(units, lip, bin_wall(false, wall))
 }
 
+/// A bin's outside size (mm): width and depth less the gap, height with the stacking lip.
+pub fn bin_size(o: &BinOptions) -> [f64; 3] {
+    let (_, _, w, d) = o.outline();
+    [w, d, UNIT_H * o.units as f64 + if o.lip { LIP.0 + LIP.1 + LIP.2 - LIP_FLAT } else { 0.0 }]
+}
+
 /// The wall a bin gets: the one asked for, or the standard one (0).
 pub fn bin_wall(eco: bool, wall: f64) -> f64 {
     if wall > 0.0 { wall } else if eco { ECO_WALL } else { WALL }

@@ -6,7 +6,7 @@ pub mod geometry;
 pub mod plate;
 
 use drawer::{drawer_commands, DrawerOptions, Filler};
-use geometry::{baseplate_commands, bin_commands, bin_inside_top, bin_wall, label_areas, label_size, text_depth, text_width, BaseplateOptions, BinOptions, FLOOR_Z, HALF_PITCH, PITCH, UNIT_H};
+use geometry::{baseplate_commands, bin_commands, bin_inside_top, bin_size, bin_wall, label_areas, label_size, text_depth, text_width, BaseplateOptions, BinOptions, FLOOR_Z, HALF_PITCH, PITCH, UNIT_H};
 use serde_json::{Map, Value};
 use serde_json::json;
 
@@ -73,6 +73,12 @@ fn get_origin(p: &Map<String, Value>) -> Result<[f64; 2], String> {
         }
         _ => Err("origin must be [x, y] in mm".into()),
     }
+}
+
+/// A length for a name: at most two decimals, no trailing zeros (89.5, 42, 39.1).
+fn mm(v: f64) -> String {
+    let s = format!("{:.2}", v);
+    s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
 fn get_name(p: &Map<String, Value>, default: &str) -> Result<String, String> {
@@ -171,6 +177,7 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
     while label_text.last().is_some_and(|t| t.is_empty()) {
         label_text.pop();
     }
+    let auto_name = format!("Gridfinity{half} bin {nx}x{ny}x{units}");
     let mut o = BinOptions {
         nx,
         ny,
@@ -209,8 +216,13 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         ],
         wall,
         origin: get_origin(p)?,
-        name: get_name(p, &format!("Gridfinity{half} bin {nx}x{ny}x{units}"))?,
+        name: get_name(p, &auto_name)?,
     };
+    // the automatic name says how big the bin really is
+    if o.name == auto_name {
+        let [w, d, h] = bin_size(&o);
+        o.name = format!("{auto_name} ({} x {} x {} mm)", mm(w), mm(d), mm(h));
+    }
     // a thick wall keeps some room inside, also in each compartment
     let inside = |cells: u32, pitch: f64, filler: f64, div: u32| {
         (pitch * cells as f64 + filler - 0.5 - 2.0 * bin_wall(eco, wall)) / (div + 1) as f64
@@ -838,7 +850,11 @@ mod tests {
         assert_eq!((o.origin, o.name.as_str()), ([5.0, 0.0], "Tray"));
         assert!(parse_baseplate(&json!({"holes_magnet": true})).unwrap().magnets);
         let h = parse_bin(&json!({"grid": "21 mm (half)", "width": 24})).unwrap();
-        assert_eq!((h.pitch, h.nx, h.name.as_str()), ([HALF_PITCH; 2], 24, "Gridfinity half bin 24x1x3"));
+        assert_eq!((h.pitch, h.nx, h.name.as_str()), ([HALF_PITCH; 2], 24, "Gridfinity half bin 24x1x3 (503.5 x 20.5 x 25.1 mm)"));
+        // the automatic name has the real size: less the gap, with filler, with or without the lip
+        assert_eq!(parse_bin(&json!({"width": 3, "height": 5, "grid": "Custom", "custom_size_x": 30, "custom_size_y": 30})).unwrap().name,
+            "Gridfinity 30x30 mm bin 3x1x5 (89.5 x 29.5 x 39.1 mm)");
+        assert_eq!(parse_bin(&json!({"filler_left": 10.25, "stacking_lip": false})).unwrap().name, "Gridfinity bin 1x1x3 (51.75 x 41.5 x 21 mm)");
         assert_eq!(parse_bin(&json!({"grid": "42 mm (full)"})).unwrap().pitch, [PITCH; 2]);
         assert!(parse_bin(&json!({"grid": "huge"})).is_err());
         assert!(parse_bin(&json!({"width": 13})).is_err());
@@ -855,7 +871,7 @@ mod tests {
         assert!(!cmds.is_empty());
         // custom cell sizes
         let c = parse_bin(&json!({"grid": "Custom (sizes below)", "custom_size_x": 40, "custom_size_y": 45.5, "width": 2})).unwrap();
-        assert_eq!((c.pitch, c.name.as_str()), ([40.0, 45.5], "Gridfinity 40x45.5 mm bin 2x1x3"));
+        assert_eq!((c.pitch, c.name.as_str()), ([40.0, 45.5], "Gridfinity 40x45.5 mm bin 2x1x3 (79.5 x 45 x 25.1 mm)"));
         assert_eq!(parse_bin(&json!({"grid": "custom"})).unwrap().pitch, [PITCH; 2]);
         // the custom sizes only count when Custom is chosen
         assert_eq!(parse_bin(&json!({"grid": "42 mm (full)", "custom_size_x": 30})).unwrap().pitch, [PITCH; 2]);
@@ -1085,7 +1101,7 @@ mod tests {
         // the text joins a seed block, which is cut away after
         let last = c.last().unwrap();
         assert_eq!((last["command"].as_str(), last["params"]["operation"].as_str(), last["params"]["targets"][0].as_str()),
-            (Some("solid.box"), Some("cut"), Some("Gridfinity bin 2x1x3 Label")));
+            (Some("solid.box"), Some("cut"), Some("Gridfinity bin 2x1x3 (83.5 x 41.5 x 25.1 mm) Label")));
         // flush: sunk into the tab, then cut out of the bin keeping the text
         let (_, c) = plan("bin", &json!({"inside_label_text": "M3", "inside_label_text_style": "Flush (inlaid)"})).unwrap();
         let ext = c.iter().rev().find(|v| v["command"] == "solid.extrude").unwrap();
