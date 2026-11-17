@@ -157,11 +157,11 @@ folder named like the body (open the folder to edit a single step).
 
 ![The bin's folder in the History bar](docs/images/timeline-folder.png)
 
-| Plugins menu | The bin form (here a custom 40 × 25 mm grid) |
+| Plugins menu | The bin form |
 |---|---|
-| ![Plugins menu](docs/images/plugins-menu.png) | ![Bin dialog](docs/images/dialog-custom.png) |
+| ![Plugins menu](docs/images/plugins-menu.png) | ![Bin dialog](docs/images/dialog-bin.png) |
 
-![The bin in SolidCraft after Run](docs/images/gui-custom-bin.png)
+![A bin on a custom 40 × 25 mm grid in SolidCraft after Run](docs/images/gui-custom-bin.png)
 
 | The drawer baseplate form | Its four pieces in SolidCraft |
 |---|---|
