@@ -25,6 +25,11 @@ const DIVIDER: f64 = 1.2;
 /// Corrugated walls: ridge depth (mm, the valleys lie this far inside the outside) and pitch (mm).
 pub const CORRUGATION_DEPTH: f64 = 1.1;
 pub const CORRUGATION_PITCH: f64 = 7.0;
+/// Double lip: height of the top above the last unit, and where the ledges sit (mm below the top;
+/// each ledge reaches LEDGE_INSET in from the outside).
+pub const DOUBLE_LIP_H: f64 = 3.8;
+const LEDGE_INSET: f64 = 3.75;
+const LEDGE_BANDS: [(f64, f64); 2] = [(6.2, 3.8), (3.1, 1.3)];
 /// How far a label tab reaches out from the back wall (mm); its underside slopes at 45°.
 const LABEL_W: f64 = 12.0;
 /// Largest automatic label text (capital height, mm).
@@ -87,6 +92,8 @@ pub struct BinOptions {
     pub wall: f64,
     /// Outer wall in vertical ridges (7 mm pitch, 1.1 mm deep), as on the Corrugated Light Bins.
     pub corrugated: bool,
+    /// Two inward ledges on the inside of the top, instead of the stacking lip (Corrugated Light Bins).
+    pub double_lip: bool,
     /// The bin's corner, filler included.
     pub origin: [f64; 2],
     pub name: String,
@@ -101,7 +108,8 @@ pub fn bin_inside_top(units: u32, lip: bool, wall: f64) -> f64 {
 /// A bin's outside size (mm): width and depth less the gap, height with the stacking lip.
 pub fn bin_size(o: &BinOptions) -> [f64; 3] {
     let (_, _, w, d) = o.outline();
-    [w, d, UNIT_H * o.units as f64 + if o.lip { LIP.0 + LIP.1 + LIP.2 - LIP_FLAT } else { 0.0 }]
+    let top = if o.double_lip { DOUBLE_LIP_H } else if o.lip { LIP.0 + LIP.1 + LIP.2 - LIP_FLAT } else { 0.0 };
+    [w, d, UNIT_H * o.units as f64 + top]
 }
 
 /// The wall a bin gets: the one asked for, or the standard one (0).
@@ -400,7 +408,7 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     let (cx, cy, w, d) = o.outline();
     let grid = o.grid_corner();
     let height = UNIT_H * o.units as f64;
-    let block_top = height + if o.lip { LIP.0 + LIP.1 + LIP.2 - LIP_FLAT } else { 0.0 };
+    let block_top = height + if o.double_lip { DOUBLE_LIP_H } else if o.lip { LIP.0 + LIP.1 + LIP.2 - LIP_FLAT } else { 0.0 };
     let blk = Block { corner: grid, nx: o.nx, ny: o.ny, pitch };
     // corrugated walls: the valleys are the inside of the walls, so the wall grows by the depth
     let ridge = if o.corrugated { CORRUGATION_DEPTH } else { 0.0 };
@@ -416,7 +424,25 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     let hollow = !o.solid;
     // a solid bin filled lower than the walls gets the same walls and lip support as a hollow one
     let pocket = hollow || o.fill > 0.0;
-    if o.lip {
+    // Double lip (hollow bins only): the cavity is cut in bands, so the ledges stay solid between
+    // the wall line and LEDGE_INSET.
+    let double = o.double_lip && hollow;
+    if double {
+        z = block_top;
+        let t = block_top;
+        let bands = [
+            (floor, t - LEDGE_BANDS[0].0, wall),
+            (t - LEDGE_BANDS[0].0, t - LEDGE_BANDS[0].1, LEDGE_INSET),
+            (t - LEDGE_BANDS[0].1, t - LEDGE_BANDS[1].0, wall),
+            (t - LEDGE_BANDS[1].0, t - LEDGE_BANDS[1].1, LEDGE_INSET),
+            (t - LEDGE_BANDS[1].1, t, wall),
+        ];
+        for (k, (lo, hi, inset)) in bands.iter().enumerate() {
+            let name = n(&format!("Cavity band {}", k + 1));
+            sketch(&mut out, *lo, &name, vec![rrect(cx, cy, w - 2.0 * inset, d - 2.0 * inset, (FOOT_TOP_R - inset).max(0.2))]);
+            out.push(extrude(&name, hi - lo, Op::Cut(b), None, "positive"));
+        }
+    } else if o.lip {
         z = block_top;
         let d1 = LIP.2 - LIP_FLAT;
         let inset = LIP_FLAT;
@@ -445,7 +471,7 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     } else {
         z = height;
     }
-    if pocket {
+    if pocket && !double {
         let bottom = if hollow { floor } else { o.fill };
         sketch(&mut out, z, &n("Cavity"), vec![rrect(cx, cy, w - 2.0 * wall, d - 2.0 * wall, (top - wall).max(0.2))]);
         out.push(extrude(&n("Cavity"), z - bottom, Op::Cut(b), None, "negative"));
@@ -786,7 +812,7 @@ mod tests {
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
         BinOptions { nx, ny, pitch: [PITCH; 2], units, sized_units: units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, eco: false, fill: 0.0, scoop: 0.0, label: false,
-            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(), filler: [0.0; 4], wall: 0.0, corrugated: false,
+            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(), filler: [0.0; 4], wall: 0.0, corrugated: false, double_lip: false,
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 
@@ -1052,7 +1078,7 @@ mod corrugated_tests {
 
     #[test]
     fn corrugated_bin_cavity_moves_in_by_the_ridge_depth() {
-        let base = BinOptions { nx: 2, ny: 5, pitch: [42.0; 2], units: 3, sized_units: 3, magnets: false, screws: false, div_x: 0, div_y: 0, lip: true, solid: false, eco: false, fill: 0.0, scoop: 0.0, label: false, label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(), filler: [0.0; 4], wall: 0.0, corrugated: false, origin: [0.0; 2], name: "t".into() };
+        let base = BinOptions { nx: 2, ny: 5, pitch: [42.0; 2], units: 3, sized_units: 3, magnets: false, screws: false, div_x: 0, div_y: 0, lip: true, solid: false, eco: false, fill: 0.0, scoop: 0.0, label: false, label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(), filler: [0.0; 4], wall: 0.0, corrugated: false, double_lip: false, origin: [0.0; 2], name: "t".into() };
         let cavity_x = |cmds: &[Value]| {
             let i = cmds.iter().position(|c| c["params"]["name"] == "t Cavity").unwrap();
             cmds[i + 1]["params"]["p0"][0].as_f64().unwrap()

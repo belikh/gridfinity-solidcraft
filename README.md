@@ -50,6 +50,9 @@ one undo step, editable afterwards, and they keep working without the plugin.
 - **Corrugated walls** (`corrugated_walls`, on or off): the outer wall has vertical ridges 7 mm apart, 1.1 mm deep,
   as on the Corrugated Light Bins. The inside wall moves in by the ridge depth. Corners are square on this wall.
   Combine with Eco (thin walls) for the lightest bins.
+- **Double lip** (`double_lip`, hollow bins only): two inward ledges near the top instead of the stacking
+  lip. The top stands 3.8 mm above the last unit. The ledges sit 6.2 to 3.8 mm and 3.1 to 1.3 mm below
+  the top, 3.75 mm in from the outside.
 - **Eco bins** (`inside`: "Eco (thin walls, hollow feet)"): 0.8 mm walls and floor and hollow
   feet (a 0.8 mm shell, open into the bin), for much less filament and print time: a 1×1×3 bin takes
   5.3 cm³ instead of 12.8. Dividers, scoops, label tabs and magnet holes work as in other bins;

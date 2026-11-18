@@ -216,6 +216,7 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
         ],
         wall,
         corrugated: get_b(p, &["corrugated_walls"], false)?,
+        double_lip: get_b(p, &["double_lip"], false)?,
         origin: get_origin(p)?,
         name: get_name(p, &auto_name)?,
     };
