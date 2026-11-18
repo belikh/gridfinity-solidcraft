@@ -5,7 +5,7 @@ pub mod drawer;
 pub mod geometry;
 pub mod plate;
 
-use drawer::{drawer_commands, DrawerOptions, Filler};
+use drawer::{drawer_commands, DrawerOptions, Filler, LAYOUT_GAP};
 use geometry::{baseplate_commands, bin_commands, bin_inside_top, bin_size, bin_wall, label_areas, label_size, text_depth, text_width, BaseplateOptions, BinOptions, FLOOR_Z, HALF_PITCH, PITCH, UNIT_H};
 use serde_json::{Map, Value};
 use serde_json::json;
@@ -434,6 +434,26 @@ fn get_leftover(p: &Map<String, Value>) -> Result<bool, String> {
     }
 }
 
+/// Room left around a plate made to fill a picked drawer floor, in all (mm): half on each side.
+pub const FLOOR_CLEARANCE: f64 = 0.5;
+
+/// The drawer floor the user picked (SolidCraft 0.44 and later), if any.
+pub fn picked_floor(params: &Value) -> Option<&Value> {
+    params.get("floor").and_then(|f| f.get(0))
+}
+
+/// The drawer parameters for a plate that fills a floor of this size, with its minimum corner
+/// here: the size less the clearance, centred on the floor.
+pub fn fill_floor(params: &Value, size: [f64; 2], corner: [f64; 2]) -> Value {
+    let mut p = params.clone();
+    let r = |v: f64| (v * 100.0).round() / 100.0;
+    p["drawer_width"] = json!(r(size[0] - FLOOR_CLEARANCE));
+    p["drawer_depth"] = json!(r(size[1] - FLOOR_CLEARANCE));
+    p["position_x"] = json!(r(corner[0] + FLOOR_CLEARANCE / 2.0));
+    p["position_y"] = json!(r(corner[1] + FLOOR_CLEARANCE / 2.0));
+    p
+}
+
 pub fn parse_drawer(params: &Value) -> Result<DrawerOptions, String> {
     let empty = Map::new();
     let p = params.as_object().unwrap_or(&empty);
@@ -461,6 +481,8 @@ pub fn parse_drawer(params: &Value) -> Result<DrawerOptions, String> {
         open,
         magnets,
         origin: get_origin(p)?,
+        // in a picked drawer the pieces lie together, as they will in the drawer
+        gap: if picked_floor(params).is_some() { 0.0 } else { LAYOUT_GAP },
         name: get_name(p, &format!("Gridfinity{half} drawer {}x{}", drawer[0], drawer[1]))?,
         piece,
     })
@@ -767,11 +789,60 @@ mod guest {
 
     struct Gridfinity;
 
+    /// Runs a host command and returns its result.
+    fn host(c: &str, a: Value) -> Result<Value, String> {
+        let r: Value = serde_json::from_str(&commands::run(c, &a.to_string()).map_err(|e| format!("{c}: {e:?}"))?).unwrap_or(Value::Null);
+        Ok(r.get("result").cloned().unwrap_or(r))
+    }
+
+    /// The picked face's outline as an axis-aligned rectangle: its size, its minimum corner and
+    /// its height. The face must be flat and face up. Its outline is the edges that name it.
+    fn floor_rect(face: &Value) -> Result<([f64; 2], [f64; 2], f64), String> {
+        let body = face["body"].as_str().ok_or("Drawer floor: pick a face")?;
+        let index = face["index"].as_u64().ok_or("Drawer floor: pick a face")?;
+        let faces = host("model.faces", json!({"body": body}))?;
+        let f = faces["faces"].as_array().into_iter().flatten().find(|f| f["index"].as_u64() == Some(index))
+            .ok_or("Drawer floor: that face is gone")?;
+        if f["plane_normal"][2].as_f64().unwrap_or(0.0) < 0.999 {
+            return Err("Drawer floor: pick a flat face that faces up".into());
+        }
+        let name = f["name"].as_str().unwrap_or_default().to_string();
+        let edges = host("model.edges", json!({"body": body}))?;
+        let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
+        let mut z = 0.0;
+        for e in edges["edges"].as_array().into_iter().flatten() {
+            if !e["name"].as_str().unwrap_or_default().split('|').any(|n| n == name) {
+                continue;
+            }
+            for k in ["start", "end", "mid"] {
+                for i in 0..2 {
+                    let v = e[k][i].as_f64().unwrap_or(0.0);
+                    lo[i] = lo[i].min(v);
+                    hi[i] = hi[i].max(v);
+                }
+                z = e[k][2].as_f64().unwrap_or(0.0);
+            }
+        }
+        if lo[0] > hi[0] {
+            return Err("Drawer floor: found no edges around that face".into());
+        }
+        Ok(([hi[0] - lo[0], hi[1] - lo[1]], lo, z))
+    }
+
     impl Guest for Gridfinity {
         fn execute(entry: String, params: String) -> Result<String, PluginError> {
             let params: Value = serde_json::from_str(if params.trim().is_empty() { "{}" } else { &params })
                 .map_err(|e| PluginError::InvalidInput(FieldFailure { field: "params".into(), reason: e.to_string() }))?;
             let invalid = |reason| PluginError::InvalidInput(FieldFailure { field: entry.clone(), reason });
+            // A picked drawer floor gives the drawer's size and where the plate goes; the plate
+            // is built at z 0 and lifted onto the floor at the end.
+            let mut params = params;
+            let mut lift = 0.0;
+            if let Some(face) = picked_floor(&params).filter(|_| entry == "drawer").cloned() {
+                let (size, corner, z) = floor_rect(&face).map_err(invalid)?;
+                params = fill_floor(&params, size, corner);
+                lift = z;
+            }
             let (mut body, mut cmds) = plan(&entry, &params).map_err(invalid)?;
             // A body named like one already in the design would get an automatic name
             // ("Body2") that SolidCraft doesn't keep when it rebuilds, and the features made for
@@ -807,6 +878,15 @@ mod guest {
                 let reply = commands::run(&name, &args.to_string())?;
                 run.record(c, &serde_json::from_str(&reply).unwrap_or(Value::Null));
             }
+            if lift.abs() > 1e-6 {
+                let list = host("model.body_features", json!({})).map_err(invalid)?;
+                let made: Vec<&str> = list["bodies"].as_array().into_iter().flatten()
+                    .filter_map(|b| b["body"].as_str()).filter(|b| !existing.iter().any(|e| e == b)).collect();
+                let reply = host("solid.move", json!({"bodies": made, "translate": [0.0, 0.0, lift]})).map_err(invalid)?;
+                if let Some(f) = reply.get("feature") {
+                    run.features.push(f.clone());
+                }
+            }
             // One folder in the timeline, named like the body, holds everything the run made.
             // The model is finished by now, so a folder that can't be made doesn't fail the run.
             if !run.features.is_empty() {
@@ -822,6 +902,17 @@ mod guest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_picked_floor_is_filled_less_the_clearance_and_the_pieces_lie_together() {
+        let face = json!({"type": "face", "body": "Drawer", "index": 10, "point": [0.0, 0.0, 4.0]});
+        let p = fill_floor(&json!({"floor": [face]}), [314.0, 234.0], [13.0, 23.0]);
+        assert_eq!((p["drawer_width"].as_f64(), p["drawer_depth"].as_f64()), (Some(313.5), Some(233.5)));
+        assert_eq!((p["position_x"].as_f64(), p["position_y"].as_f64()), (Some(13.25), Some(23.25)));
+        assert_eq!(parse_drawer(&p).unwrap().gap, 0.0);
+        assert_eq!(parse_drawer(&json!({"floor": []})).unwrap().gap, LAYOUT_GAP);
+        assert_eq!(parse_drawer(&json!({})).unwrap().gap, LAYOUT_GAP);
+    }
 
     #[test]
     fn the_runner_collects_what_goes_in_the_folder() {

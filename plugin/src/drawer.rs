@@ -1,7 +1,8 @@
 //! A baseplate that fills a drawer: as many cells as fit, filler around them, cut along the
 //! grid lines into pieces that fit the printer, joined by dovetail tabs.
 //!
-//! Each piece is built where it will lie in the design, laid out with a gap: as a baseplate
+//! Each piece is built where it will lie in the design, laid out with a gap (or together, in a
+//! drawer whose floor was picked): as a baseplate
 //! (see plate.rs), with filler on the drawer's outside and a tab or socket at every cell along
 //! each seam. The first cell is made once and copied to the start of every other piece.
 
@@ -9,7 +10,8 @@ use crate::geometry::{cmd, r4, Block, HALF_PITCH, PITCH};
 use crate::plate::{first_cell, piece_commands, piece_commands_seeded, plate_height, Piece, Seeds, TAB_DEPTH};
 use serde_json::{json, Value};
 
-/// Space between the pieces as they are laid out in the design (mm).
+/// Space between the pieces as they are laid out in the design (mm), unless they are built
+/// together in a picked drawer.
 pub const LAYOUT_GAP: f64 = 10.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -35,6 +37,8 @@ pub struct DrawerOptions {
     pub open: bool,
     pub magnets: bool,
     pub origin: [f64; 2],
+    /// Space between the pieces in the design: LAYOUT_GAP, or 0 in a picked drawer.
+    pub gap: f64,
     pub name: String,
     /// Build only this piece (numbered across X, then Y, from 1), or all of them (0).
     pub piece: u32,
@@ -172,8 +176,8 @@ pub fn pieces(o: &DrawerOptions, pl: &DrawerPlan) -> Vec<Piece> {
     let name = |i: usize, j: usize| if kx * ky == 1 { o.name.clone() } else { format!("{} {}-{}", o.name, i + 1, j + 1) };
     // a piece's first cell, with its share of the layout gap
     let corner = |i: usize, j: usize| [
-        o.origin[0] + ax.filler_low + px * cx0[i] as f64 + i as f64 * LAYOUT_GAP,
-        o.origin[1] + ay.filler_low + py * cy0[j] as f64 + j as f64 * LAYOUT_GAP,
+        o.origin[0] + ax.filler_low + px * cx0[i] as f64 + i as f64 * o.gap,
+        o.origin[1] + ay.filler_low + py * cy0[j] as f64 + j as f64 * o.gap,
     ];
     let mut v = Vec::new();
     for j in 0..ky {
@@ -287,7 +291,7 @@ mod tests {
 
     fn opts(drawer: [f64; 2], bed: [f64; 2]) -> DrawerOptions {
         DrawerOptions { drawer, bed, pitch: [PITCH; 2], filler: [Filler::Even; 2], half_cells: false, open: false, magnets: false,
-                        origin: [0.0, 0.0], name: "Drawer".into(), piece: 0 }
+                        origin: [0.0, 0.0], gap: LAYOUT_GAP, name: "Drawer".into(), piece: 0 }
     }
 
     #[test]
@@ -374,7 +378,7 @@ mod more_tests {
     #[test]
     fn a_big_drawer_stays_under_the_call_limit() {
         let o = DrawerOptions { drawer: [600.0, 500.0], bed: [256.0, 256.0], pitch: [PITCH; 2], filler: [Filler::Even; 2], half_cells: false,
-                                open: false, magnets: true, origin: [0.0, 0.0], name: "D".into(), piece: 0 };
+                                open: false, magnets: true, origin: [0.0, 0.0], gap: LAYOUT_GAP, name: "D".into(), piece: 0 };
         let (pl, c) = drawer_commands(&o).unwrap();
         assert_eq!((pl.axes[0].cells, pl.axes[1].cells), (14, 11));
         assert!(c.len() <= MAX_CALLS, "{} calls", c.len());
@@ -409,7 +413,7 @@ mod more_tests {
         assert_eq!((a.filler_low, a.filler_high), (6.0, 6.0));
         // the half cells are cut only into the pieces on that side
         let o = DrawerOptions { drawer: [400.0, 300.0], bed: [256.0, 256.0], pitch: [PITCH; 2], filler: [Filler::Even; 2], half_cells: true,
-                                open: false, magnets: false, origin: [0.0, 0.0], name: "D".into(), piece: 0 };
+                                open: false, magnets: false, origin: [0.0, 0.0], gap: LAYOUT_GAP, name: "D".into(), piece: 0 };
         let (_, c) = drawer_commands(&o).unwrap();
         let named = |end: &str| c.iter().filter(|v| v["command"] == "sketch.create" && v["params"]["name"].as_str().unwrap().contains(end)).count();
         // 400 x 300: 9 x 7 cells, 22 and 6 mm over: half cells along X only, on the right pieces
@@ -425,7 +429,7 @@ mod more_tests {
     #[test]
     fn too_many_pieces_is_refused_in_words() {
         let o = DrawerOptions { drawer: [1000.0, 1000.0], bed: [100.0, 100.0], pitch: [PITCH; 2], filler: [Filler::Even; 2], half_cells: false,
-                                open: false, magnets: false, origin: [0.0, 0.0], name: "D".into(), piece: 0 };
+                                open: false, magnets: false, origin: [0.0, 0.0], gap: LAYOUT_GAP, name: "D".into(), piece: 0 };
         assert!(drawer_commands(&o).unwrap_err().contains("pieces"));
     }
 }
