@@ -47,6 +47,9 @@ one undo step, editable afterwards, and they keep working without the plugin.
   ([example](examples/solid-holder.json)). Set a **fill height** (`inside_fill_height`, mm from the
   bottom of the bin) to stop the fill lower: above it the bin is hollow with walls and lip, so a bin
   stacked on top clears what sits in your cutouts.
+- **Corrugated walls** (`corrugated_walls`, on or off): the outer wall has vertical ridges 7 mm apart, 1.1 mm deep,
+  as on the Corrugated Light Bins. The inside wall moves in by the ridge depth. Corners are square on this wall.
+  Combine with Eco (thin walls) for the lightest bins.
 - **Eco bins** (`inside`: "Eco (thin walls, hollow feet)"): 0.8 mm walls and floor and hollow
   feet (a 0.8 mm shell, open into the bin), for much less filament and print time: a 1×1×3 bin takes
   5.3 cm³ instead of 12.8. Dividers, scoops, label tabs and magnet holes work as in other bins;

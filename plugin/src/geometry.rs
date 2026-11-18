@@ -22,6 +22,9 @@ const LIP: (f64, f64, f64) = (0.7, 1.8, 1.9);
 const LIP_FLAT: f64 = 0.3;
 const LIP_SUPPORT: f64 = 1.2;
 const DIVIDER: f64 = 1.2;
+/// Corrugated walls: ridge depth (mm, the valleys lie this far inside the outside) and pitch (mm).
+pub const CORRUGATION_DEPTH: f64 = 1.1;
+pub const CORRUGATION_PITCH: f64 = 7.0;
 /// How far a label tab reaches out from the back wall (mm); its underside slopes at 45°.
 const LABEL_W: f64 = 12.0;
 /// Largest automatic label text (capital height, mm).
@@ -82,6 +85,8 @@ pub struct BinOptions {
     pub filler: [f64; 4],
     /// Wall thickness (mm), inward from the outside (0: WALL, or ECO_WALL for eco bins).
     pub wall: f64,
+    /// Outer wall in vertical ridges (7 mm pitch, 1.1 mm deep), as on the Corrugated Light Bins.
+    pub corrugated: bool,
     /// The bin's corner, filler included.
     pub origin: [f64; 2],
     pub name: String,
@@ -351,6 +356,33 @@ pub(crate) fn block_holes(b: Block, grid_origin: [f64; 2], dia: f64) -> Vec<Valu
 ///
 /// The block with its lip, cavity and dividers comes first, while it is a simple shape; then
 /// one foot, with its holes, is made as its own body, repeated under every cell and joined on.
+/// The outside of a corrugated wall: a closed polyline around the w x d outline, with ridges at
+/// the outside and valleys CORRUGATION_DEPTH inside, one ridge per CORRUGATION_PITCH on each side.
+/// Corners are square here (the rounded corners of a plain bin are not kept on this wall).
+fn corrugated_profile(cx: f64, cy: f64, w: f64, d: f64) -> Value {
+    let a = CORRUGATION_DEPTH;
+    let (x0, x1, y0, y1) = (cx - w / 2.0, cx + w / 2.0, cy - d / 2.0, cy + d / 2.0);
+    let outer = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+    let valley = [[x0 + a, y0 + a], [x1 - a, y0 + a], [x1 - a, y1 - a], [x0 + a, y1 - a]];
+    let mut pts: Vec<[f64; 2]> = Vec::new();
+    for i in 0..4 {
+        let (o0, o1, v0, v1) = (outer[i], outer[(i + 1) % 4], valley[i], valley[(i + 1) % 4]);
+        let len = ((o1[0] - o0[0]).powi(2) + (o1[1] - o0[1]).powi(2)).sqrt();
+        // whole periods along the side, so each ridge lands about one pitch from the last
+        let n = ((len / CORRUGATION_PITCH).round() as usize).max(1);
+        for j in 0..2 * n {
+            let t = j as f64 / (2 * n) as f64;
+            let p = if j % 2 == 0 {
+                [o0[0] + (o1[0] - o0[0]) * t, o0[1] + (o1[1] - o0[1]) * t]
+            } else {
+                [v0[0] + (v1[0] - v0[0]) * t, v0[1] + (v1[1] - v0[1]) * t]
+            };
+            pts.push([r4(p[0]), r4(p[1])]);
+        }
+    }
+    cmd("sketch.line", json!({"points": pts, "closed": true}))
+}
+
 pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     let b = o.name.as_str();
     let n = |s: &str| format!("{b} {s}");
@@ -370,9 +402,12 @@ pub fn bin_commands(o: &BinOptions) -> Vec<Value> {
     let height = UNIT_H * o.units as f64;
     let block_top = height + if o.lip { LIP.0 + LIP.1 + LIP.2 - LIP_FLAT } else { 0.0 };
     let blk = Block { corner: grid, nx: o.nx, ny: o.ny, pitch };
-    let (wall, floor) = (o.wall(), o.floor());
+    // corrugated walls: the valleys are the inside of the walls, so the wall grows by the depth
+    let ridge = if o.corrugated { CORRUGATION_DEPTH } else { 0.0 };
+    let (wall, floor) = (o.wall() + ridge, o.floor());
 
-    sketch(&mut out, foot_h, &n("Body"), vec![rrect(cx, cy, w, d, top)]);
+    let body = if o.corrugated { corrugated_profile(cx, cy, w, d) } else { rrect(cx, cy, w, d, top) };
+    sketch(&mut out, foot_h, &n("Body"), vec![body]);
     out.push(extrude(&n("Body"), block_top - foot_h, Op::New(b), None, ""));
 
     // Cavity and stacking lip, cut from the top down.
@@ -751,7 +786,7 @@ mod tests {
 
     fn bin(nx: u32, ny: u32, units: u32) -> BinOptions {
         BinOptions { nx, ny, pitch: [PITCH; 2], units, sized_units: units, magnets: true, screws: false, div_x: 1, div_y: 0, lip: true, solid: false, eco: false, fill: 0.0, scoop: 0.0, label: false,
-            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(), filler: [0.0; 4], wall: 0.0,
+            label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(), filler: [0.0; 4], wall: 0.0, corrugated: false,
                      origin: [0.0, 0.0], name: "Bin".into() }
     }
 
@@ -988,5 +1023,44 @@ mod tests {
         assert!(bin_commands(&o).len() < 100);
         let p = BaseplateOptions { nx: 24, ny: 24, pitch: [HALF_PITCH; 2], open: false, magnets: true, filler: [0.0; 4], half_cells: false, origin: [0.0, 0.0], name: "P".into() };
         assert!(baseplate_commands(&p).len() < 100);
+    }
+}
+
+#[cfg(test)]
+mod corrugated_tests {
+    use super::*;
+
+    fn points(v: &Value) -> Vec<[f64; 2]> {
+        v["params"]["points"].as_array().unwrap().iter().map(|p| [p[0].as_f64().unwrap(), p[1].as_f64().unwrap()]).collect()
+    }
+
+    #[test]
+    fn profile_has_ridges_at_the_outside_and_valleys_inside() {
+        // a 2 x 5 bin: 83.5 x 209.5 mm
+        let v = corrugated_profile(0.0, 0.0, 83.5, 209.5);
+        let p = points(&v);
+        let max_x = p.iter().map(|q| q[0]).fold(f64::MIN, f64::max);
+        let min_x = p.iter().map(|q| q[0]).fold(f64::MAX, f64::min);
+        assert!((max_x - 41.75).abs() < 1e-6, "ridge at the outside: {max_x}");
+        assert!((min_x + 41.75).abs() < 1e-6, "ridge on the left side: {min_x}");
+        assert!(p.iter().any(|q| (q[0] - (-41.75 + CORRUGATION_DEPTH)).abs() < 1e-6), "valley {CORRUGATION_DEPTH} mm inside on the left");
+        // 12 periods along X and 30 along Y, two points per period, on each of the four sides
+        assert_eq!(p.len(), 2 * (12 + 30 + 12 + 30));
+        assert_eq!(v["command"], "sketch.line");
+        assert_eq!(v["params"]["closed"], true);
+    }
+
+    #[test]
+    fn corrugated_bin_cavity_moves_in_by_the_ridge_depth() {
+        let base = BinOptions { nx: 2, ny: 5, pitch: [42.0; 2], units: 3, sized_units: 3, magnets: false, screws: false, div_x: 0, div_y: 0, lip: true, solid: false, eco: false, fill: 0.0, scoop: 0.0, label: false, label_text: vec![], text_size: 0.0, text_height: 0.4, flush: false, font: String::new(), filler: [0.0; 4], wall: 0.0, corrugated: false, origin: [0.0; 2], name: "t".into() };
+        let cavity_x = |cmds: &[Value]| {
+            let i = cmds.iter().position(|c| c["params"]["name"] == "t Cavity").unwrap();
+            cmds[i + 1]["params"]["p0"][0].as_f64().unwrap()
+        };
+        let plain = bin_commands(&base);
+        let ribbed = bin_commands(&BinOptions { corrugated: true, ..base.clone() });
+        let (x_plain, x_ribbed) = (cavity_x(&plain), cavity_x(&ribbed));
+        assert!((x_ribbed - (x_plain + CORRUGATION_DEPTH)).abs() < 1e-6, "plain {x_plain}, ribbed {x_ribbed}");
+        assert!(ribbed.iter().any(|c| c["command"] == "sketch.line" && c["params"]["closed"] == true));
     }
 }

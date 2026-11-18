@@ -215,6 +215,7 @@ pub fn parse_bin(params: &Value) -> Result<BinOptions, String> {
             get_mm(p, "filler_back", 0.0, 0.0, MAX_FILLER)?,
         ],
         wall,
+        corrugated: get_b(p, &["corrugated_walls"], false)?,
         origin: get_origin(p)?,
         name: get_name(p, &auto_name)?,
     };
