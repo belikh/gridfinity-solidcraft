@@ -8,5 +8,5 @@ RUSTFLAGS="--remap-path-prefix=$HOME=~" ~/.cargo/bin/cargo build --release --tar
 cd ../package
 rm -f gridfinity-*.zip
 VERSION=$(python3 -c "import json;print(json.load(open('gridfinity/plugin.json'))['version'])")
-python3 -c "import zipfile; z=zipfile.ZipFile('gridfinity-$VERSION.zip','w',zipfile.ZIP_DEFLATED); [z.write('gridfinity/'+f) for f in ('plugin.json','plugin.wasm')]"
+python3 -c "import os, zipfile; z=zipfile.ZipFile('gridfinity-$VERSION.zip','w',zipfile.ZIP_DEFLATED); [z.write('gridfinity/'+f) for f in ['plugin.json','plugin.wasm']+sorted('i/'+i for i in os.listdir('gridfinity/i'))]"
 echo "package/gridfinity-$VERSION.zip"

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Gridfinity baseplate</title>
+  <path d="M3.00 36.71L32.00 53.45L32.00 44.03L3.00 27.29Z" fill="#328bd3"/>
+  <path d="M61.00 36.71L32.00 53.45L32.00 44.03L61.00 27.29Z" fill="#236ead"/>
+  <path d="M32.00 10.55L61.00 27.29L32.00 44.03L3.00 27.29Z" fill="#b9ddf8"/>
+  <path d="M32.00 10.55L61.00 27.29L61.00 36.71L32.00 53.45L3.00 36.71L3.00 27.29Z" fill="none" stroke="#34465b" stroke-width="2.67" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M3.00 27.29L32.00 44.03" fill="none" stroke="#34465b" stroke-width="2.67" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M32.00 44.03L61.00 27.29" fill="none" stroke="#34465b" stroke-width="2.67" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M32.00 44.03L32.00 53.45" fill="none" stroke="#34465b" stroke-width="2.67" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M32.00 13.06L42.15 18.92L42.15 22.06L32.00 16.20Z" fill="#8e9faf"/>
+  <path d="M32.00 13.06L21.85 18.92L21.85 22.06L32.00 16.20Z" fill="#8e9faf"/>
+  <path d="M32.00 16.20L42.15 22.06L32.00 27.92L21.85 22.06Z" fill="#e2e8ef"/>
+  <path d="M32.00 13.06L42.15 18.92L32.00 24.78L21.85 18.92Z" fill="none" stroke="#34465b" stroke-width="1.67" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M17.50 21.43L27.65 27.29L27.65 30.43L17.50 24.57Z" fill="#8e9faf"/>
+  <path d="M17.50 21.43L7.35 27.29L7.35 30.43L17.50 24.57Z" fill="#8e9faf"/>
+  <path d="M17.50 24.57L27.65 30.43L17.50 36.29L7.35 30.43Z" fill="#e2e8ef"/>
+  <path d="M17.50 21.43L27.65 27.29L17.50 33.15L7.35 27.29Z" fill="none" stroke="#34465b" stroke-width="1.67" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M46.50 21.43L56.65 27.29L56.65 30.43L46.50 24.57Z" fill="#8e9faf"/>
+  <path d="M46.50 21.43L36.35 27.29L36.35 30.43L46.50 24.57Z" fill="#8e9faf"/>
+  <path d="M46.50 24.57L56.65 30.43L46.50 36.29L36.35 30.43Z" fill="#e2e8ef"/>
+  <path d="M46.50 21.43L56.65 27.29L46.50 33.15L36.35 27.29Z" fill="none" stroke="#34465b" stroke-width="1.67" stroke-linejoin="round" stroke-linecap="round"/>
+  <path d="M32.00 29.80L42.15 35.66L42.15 38.80L32.00 32.94Z" fill="#8e9faf"/>
+  <path d="M32.00 29.80L21.85 35.66L21.85 38.80L32.00 32.94Z" fill="#8e9faf"/>
+  <path d="M32.00 32.94L42.15 38.80L32.00 44.66L21.85 38.80Z" fill="#e2e8ef"/>
+  <path d="M32.00 29.80L42.15 35.66L32.00 41.52L21.85 35.66Z" fill="none" stroke="#34465b" stroke-width="1.67" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

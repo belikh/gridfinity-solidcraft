@@ -42,9 +42,10 @@
       "inside": {"type": "string", "title": "Inside", "description": "Eco: 0.8 mm walls, hollow feet, less filament (no screw holes). Solid: filled, to cut your own shapes into", "enum": ["Hollow", "Eco (thin walls, hollow feet)", "Solid (for custom cutouts)"], "default": "Hollow"},
       "custom_size_x": {"type": "number", "title": "Custom cell X", "description": "Cell size along X, only used when Grid size is Custom", "minimum": 15, "maximum": 100, "default": 42, "unit": "mm"},
       "custom_size_y": {"type": "number", "title": "Custom cell Y", "description": "Cell size along Y, only used when Grid size is Custom", "minimum": 15, "maximum": 100, "default": 42, "unit": "mm"}
-     }
+     },
+     "x-solidcraft-icon": "i/bin.svg"
     },
-    "slots": [{"kind": "menu", "name": "Gridfinity bin"}]
+    "slots": [{"kind": "menu", "name": "Gridfinity bin"}, {"kind": "ribbon", "name": "Bin"}]
    },
    {
     "name": "baseplate",
@@ -68,9 +69,10 @@
       "bottom": {"type": "string", "title": "Bottom", "description": "Solid floor, or just the frame (lighter, no magnet holes)", "enum": ["Solid", "Open (frame only)"], "default": "Solid"},
       "custom_size_x": {"type": "number", "title": "Custom cell X", "description": "Cell size along X, only used when Grid size is Custom", "minimum": 15, "maximum": 100, "default": 42, "unit": "mm"},
       "custom_size_y": {"type": "number", "title": "Custom cell Y", "description": "Cell size along Y, only used when Grid size is Custom", "minimum": 15, "maximum": 100, "default": 42, "unit": "mm"}
-     }
+     },
+     "x-solidcraft-icon": "i/baseplate.svg"
     },
-    "slots": [{"kind": "menu", "name": "Gridfinity baseplate"}]
+    "slots": [{"kind": "menu", "name": "Gridfinity baseplate"}, {"kind": "ribbon", "name": "Base plate"}]
    },
    {
     "name": "drawer",
@@ -95,9 +97,10 @@
       "position_y": {"type": "number", "title": "Position Y", "description": "Corner of the first piece", "default": 0, "unit": "mm"},
       "title": {"type": "string", "title": "Body name", "description": "Leave empty for an automatic name", "maxLength": 60},
       "piece": {"type": "integer", "title": "Piece (0 = all)", "description": "Build just one piece (numbered along X, then Y). Big drawers take longer than SolidCraft allows a plugin, so build them one piece at a time", "minimum": 0, "maximum": 99, "default": 0}
-     }
+     },
+     "x-solidcraft-icon": "i/drawer.svg"
     },
-    "slots": [{"kind": "menu", "name": "Gridfinity drawer baseplate"}]
+    "slots": [{"kind": "menu", "name": "Gridfinity drawer baseplate"}, {"kind": "ribbon", "name": "Drawer plate"}]
    }
   ],
   "commands": ["sketch.create", "sketch.rectangle.rounded", "sketch.circle.center", "sketch.finish", "solid.extrude", "solid.box", "sketch.line", "sketch.pattern.rectangular", "solid.move", "solid.pattern.rectangular", "solid.combine", "sketch.rectangle.two_point", "sketch.text", "parameters.add", "parameters.list", "model.body_features", "timeline.group"],
